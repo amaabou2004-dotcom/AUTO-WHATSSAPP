@@ -1,0 +1,37 @@
+# Dépendances
+node_modules/
+.pnpm-store/
+.turbo/
+dist/
+build/
+out/
+coverage/
+
+# Secrets et environnements — NE JAMAIS COMMITTER
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.dev.vars
+.wrangler/
+supabase/.temp/
+supabase/.branches/
+
+# Rapports locaux
+audit-windows.md
+*.local.md
+logs/
+*.log
+
+# Système / éditeurs
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+
+# Divers
+*.tsbuildinfo
+.cache/
