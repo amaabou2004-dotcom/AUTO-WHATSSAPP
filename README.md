@@ -1,20 +1,20 @@
-# WhatsAuto AI — SaaS d'automatisation WhatsApp par IA
+# Amsali — SaaS d'automatisation des conversations WhatsApp par IA
 
 > **État : Phases 1 → 3 livrées.** Fondations vérifiées (`typecheck`, `lint`, **109 tests**, `build`).
 > **Ce dépôt ne contient encore aucune fonctionnalité commerciale en ligne** : pas d'authentification, pas de base de production, pas de connexion WhatsApp, pas d'IA, pas de facturation. Aucun écran, aucun document ne prétend le contraire.
-> Le nom « WhatsAuto AI » est un **nom de travail** : il ne doit pas être déposé tel quel (Brand Guidelines Meta — pas de « WhatsApp » dans un nom de produit, cf. `docs/00`, §5).
+> **Marque :** _Amsali_ (nom de travail initial : WhatsAuto AI). Le nom provient du haoussa _amsa_ (« répondre ») et ne contient aucune référence à WhatsApp, conformément aux Brand Guidelines Meta. La marque est **une valeur de configuration** (`BRAND_NAME`), jamais codée en dur. Recherche d'antériorité et plan de vérification : [`docs/11-nom-de-marque.md`](docs/11-nom-de-marque.md).**Le nom n'est pas encore déposé ni juridiquement vérifié** : à confirmer chez un registraire et dans les bases de marques avant tout usage public.
 
 ---
 
 ## 1. Où en est le projet
 
-| Phase | Objet | État |
-|---|---|---|
-| **1** | Audit, faisabilité Meta/IA, architecture, budget, modèle économique, risques, roadmap | ✅ validée (D1/D3/D4 tranchées) |
-| **2** | Architecture définitive : 55 tables + RLS, OpenAPI (81 chemins / 114 opérations), 14 ADR | ✅ validée |
-| **3** | Monorepo, CI, domaine de base, schémas partagés, runner de migrations, API minimale, console | ✅ **livrée** |
-| 4 | Identité visuelle, design system, landing page | ⏳ en attente (nom du produit requis) |
-| 5 → 16 | Auth, base de données, API métier, WhatsApp, IA, conversations, campagnes, facturation, back-office, i18n, tests, déploiement | ⏳ |
+| Phase  | Objet                                                                                                                         | État                                  |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| **1**  | Audit, faisabilité Meta/IA, architecture, budget, modèle économique, risques, roadmap                                         | ✅ validée (D1/D3/D4 tranchées)       |
+| **2**  | Architecture définitive : 55 tables + RLS, OpenAPI (81 chemins / 114 opérations), 14 ADR                                      | ✅ validée                            |
+| **3**  | Monorepo, CI, domaine de base, schémas partagés, runner de migrations, API minimale, console                                  | ✅ **livrée**                         |
+| 4      | Identité visuelle, design system, landing page                                                                                | ⏳ en attente (nom du produit requis) |
+| 5 → 16 | Auth, base de données, API métier, WhatsApp, IA, conversations, campagnes, facturation, back-office, i18n, tests, déploiement | ⏳                                    |
 
 Aucune phase ne démarre sans validation explicite.
 
@@ -58,19 +58,20 @@ Détail des choix, frontières de packages et dette assumée : [`docs/10-monorep
 
 ## 4. Documentation
 
-| Document | Contenu |
-|---|---|
-| [`docs/00-audit-environnement.md`](docs/00-audit-environnement.md) | Audit mesuré, connectivité, procédure d'audit Windows |
-| [`docs/01-faisabilite-meta.md`](docs/01-faisabilite-meta.md) | Tech Provider / Embedded Signup, **périmètre autorisé de l'IA**, tarification par message, paiements |
-| [`docs/02-architecture-cible.md`](docs/02-architecture-cible.md) | Monorepo, multi-tenant, couches WhatsApp/IA, jobs, paliers de charge |
-| [`docs/03-budget-modele-economique.md`](docs/03-budget-modele-economique.md) | Limites réelles des offres gratuites, budget à 0/10/100 clients, grille tarifaire |
-| [`docs/04-risques.md`](docs/04-risques.md) | 28 risques qualifiés et mitigations |
-| [`docs/05-roadmap.md`](docs/05-roadmap.md) | 16 phases, critères de sortie, MVP commercialisable |
-| [`docs/06-decisions-a-valider.md`](docs/06-decisions-a-valider.md) | Décisions tranchées + celles à venir |
-| [`docs/07-modele-donnees.md`](docs/07-modele-donnees.md) | 55 tables, index, politiques RLS, invariants, dimensionnement |
-| [`docs/08-api-openapi.yaml`](docs/08-api-openapi.yaml) | Contrat OpenAPI 3.1 (validé en CI) |
-| [`docs/09-adr.md`](docs/09-adr.md) | 14 décisions d'architecture |
-| [`docs/10-monorepo.md`](docs/10-monorepo.md) | Phase 3 : structure, commandes, tests, CI, dette |
+| Document                                                                     | Contenu                                                                                                 |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| [`docs/00-audit-environnement.md`](docs/00-audit-environnement.md)           | Audit mesuré, connectivité, procédure d'audit Windows                                                   |
+| [`docs/01-faisabilite-meta.md`](docs/01-faisabilite-meta.md)                 | Tech Provider / Embedded Signup, **périmètre autorisé de l'IA**, tarification par message, paiements    |
+| [`docs/02-architecture-cible.md`](docs/02-architecture-cible.md)             | Monorepo, multi-tenant, couches WhatsApp/IA, jobs, paliers de charge                                    |
+| [`docs/03-budget-modele-economique.md`](docs/03-budget-modele-economique.md) | Limites réelles des offres gratuites, budget à 0/10/100 clients, grille tarifaire                       |
+| [`docs/04-risques.md`](docs/04-risques.md)                                   | 28 risques qualifiés et mitigations                                                                     |
+| [`docs/05-roadmap.md`](docs/05-roadmap.md)                                   | 16 phases, critères de sortie, MVP commercialisable                                                     |
+| [`docs/06-decisions-a-valider.md`](docs/06-decisions-a-valider.md)           | Décisions tranchées + celles à venir                                                                    |
+| [`docs/07-modele-donnees.md`](docs/07-modele-donnees.md)                     | 55 tables, index, politiques RLS, invariants, dimensionnement                                           |
+| [`docs/08-api-openapi.yaml`](docs/08-api-openapi.yaml)                       | Contrat OpenAPI 3.1 (validé en CI)                                                                      |
+| [`docs/09-adr.md`](docs/09-adr.md)                                           | 14 décisions d'architecture                                                                             |
+| [`docs/10-monorepo.md`](docs/10-monorepo.md)                                 | Phase 3 : structure, commandes, tests, CI, dette                                                        |
+| [`docs/11-nom-de-marque.md`](docs/11-nom-de-marque.md)                       | D10 : recherche de nom, candidats éliminés, recommandation **Amsali**, plan de vérification avant dépôt |
 
 Outils : [`scripts/audit-windows.ps1`](scripts/audit-windows.ps1) (lecture seule),
 [`scripts/validate-openapi.sh`](scripts/validate-openapi.sh), [`scripts/scan-secrets.mjs`](scripts/scan-secrets.mjs).
@@ -99,4 +100,4 @@ Outils : [`scripts/audit-windows.ps1`](scripts/audit-windows.ps1) (lecture seule
 
 Phase 4 (identité visuelle et landing page) démarre après votre validation et le choix du **nom du produit** (décision D10) — le nom, le domaine et les couleurs sont configurables et ne doivent pas contenir « WhatsApp ».
 
-*Documentation et code au 31 octobre 2026. Les tarifs, quotas et politiques cités portent leur date de relevé et doivent être revérifiés aux sources officielles avant tout engagement commercial.*
+_Documentation et code au 31 octobre 2026. Les tarifs, quotas et politiques cités portent leur date de relevé et doivent être revérifiés aux sources officielles avant tout engagement commercial._

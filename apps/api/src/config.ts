@@ -48,7 +48,7 @@ export function loadConfig(env: Env): AppConfig {
     version: env.APP_VERSION ?? '0.0.0',
     allowedOrigins: origins,
     brand: {
-      name: env.BRAND_NAME ?? 'WhatsAuto AI',
+      name: env.BRAND_NAME ?? 'Amsali',
       logoUrl: env.BRAND_LOGO_URL ?? null,
       primaryColor: env.BRAND_PRIMARY_COLOR ?? '#16a34a',
     },

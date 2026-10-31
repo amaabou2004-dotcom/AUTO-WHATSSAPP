@@ -53,7 +53,7 @@ describe('GET /api/v1/meta', () => {
     expect(res.status).toBe(200);
 
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body['brand']).toMatchObject({ name: 'WhatsAuto AI' });
+    expect(body['brand']).toMatchObject({ name: 'Amsali' });
     expect(body['locales']).toEqual([
       { code: 'fr', direction: 'ltr' },
       { code: 'en', direction: 'ltr' },

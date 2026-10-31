@@ -14,7 +14,7 @@ enabled = true
 ENVIRONMENT = "development"
 APP_VERSION = "0.0.0"
 API_ALLOWED_ORIGINS = "http://localhost:5173"
-BRAND_NAME = "WhatsAuto AI"
+BRAND_NAME = "Amsali"
 ENABLED_LOCALES = "fr,en"
 
 # Environnement de préproduction (déployé sur une branche dédiée)
@@ -24,7 +24,7 @@ name = "whatsauto-api-staging"
 ENVIRONMENT = "staging"
 APP_VERSION = "0.0.0"
 API_ALLOWED_ORIGINS = "https://staging.example.com"
-BRAND_NAME = "WhatsAuto AI"
+BRAND_NAME = "Amsali"
 ENABLED_LOCALES = "fr,en"
 
 # Production : le domaine et les origines seront renseignés en Phase 16.
@@ -34,5 +34,5 @@ name = "whatsauto-api-production"
 ENVIRONMENT = "production"
 APP_VERSION = "0.0.0"
 API_ALLOWED_ORIGINS = ""
-BRAND_NAME = "WhatsAuto AI"
+BRAND_NAME = "Amsali"
 ENABLED_LOCALES = "fr,en"

@@ -93,7 +93,7 @@
 
 ---
 
-## D10 — Nom, marque et domaine
+## D10 ✅ — Nom, marque et domaine _(proposé : **Amsali**)_
 
 **Contraintes :** le nom doit être **configurable**, **ne doit pas contenir « WhatsApp »** (Brand Guidelines Meta), doit être disponible en `.com` ou `.io`.
 **Recommandation :** choisir un nom neutre (ex. pistes à évaluer : _Voxa_, _Replya_, _Kadea_, _Sendia_ — **à vérifier juridiquement et en disponibilité de domaine**, aucun n'est validé ici), et garder `WHATSAPP_*` uniquement dans le code technique. Bloque la Phase 4.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { BrandName } from './components/BrandName.js';
 import { StatusPanel } from './components/StatusPanel.js';
 import { detectLocale, isLocale, isRtl, translate, type Locale } from './lib/i18n.js';
 
@@ -36,7 +37,9 @@ export default function App() {
     <div className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-4 py-12">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-widest text-brand-500">WhatsAuto AI</p>
+          <p className="text-xs uppercase tracking-widest text-brand-500">
+            <BrandName />
+          </p>
           <h1 className="mt-1 text-3xl font-semibold">{t('app.title')}</h1>
           <p className="mt-1 text-sm text-neutral-400">{t('app.subtitle')}</p>
         </div>
