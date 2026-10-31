@@ -1,94 +1,102 @@
-# WhatsAuto AI — Monorepo du SaaS d'automatisation WhatsApp par IA
+# WhatsAuto AI — SaaS d'automatisation WhatsApp par IA
 
-> **État du projet : PHASE 1 terminée et validée · PHASE 2 livrée — en attente de validation.**
-> **Aucun code applicatif n'existe encore.** Ce dépôt contient pour l'instant l'audit, l'étude de faisabilité, l'architecture cible, le budget, le modèle économique, le registre des risques, la roadmap et les décisions à valider.
-> Ce README ne revendique **aucune** fonctionnalité en ligne, aucun client, aucun chiffre d'usage, aucune certification.
-> Les documents de Phase 2 (schéma de données, contrat OpenAPI, ADR) sont des **spécifications**, pas du code exécutable.
+> **État : Phases 1 → 3 livrées.** Fondations vérifiées (`typecheck`, `lint`, **109 tests**, `build`).
+> **Ce dépôt ne contient encore aucune fonctionnalité commerciale en ligne** : pas d'authentification, pas de base de production, pas de connexion WhatsApp, pas d'IA, pas de facturation. Aucun écran, aucun document ne prétend le contraire.
+> Le nom « WhatsAuto AI » est un **nom de travail** : il ne doit pas être déposé tel quel (Brand Guidelines Meta — pas de « WhatsApp » dans un nom de produit, cf. `docs/00`, §5).
 
 ---
 
-## 1. Où en est le projet ?
+## 1. Où en est le projet
 
 | Phase | Objet | État |
 |---|---|---|
-| **1** | Audit, faisabilité, architecture, budget, modèle économique, risques, roadmap | ✅ **livrée — à valider** |
-| **2** | Architecture technique définitive : schéma de données (55 tables), contrat OpenAPI (81 chemins / 114 opérations, **validé**), 14 ADR | ✅ **livrée — à valider** |
-| 3 → 16 | Monorepo, frontend, auth, base de données, API, WhatsApp, IA, conversations, campagnes, facturation, back-office, i18n, tests, déploiement | ⏳ non démarrées |
+| **1** | Audit, faisabilité Meta/IA, architecture, budget, modèle économique, risques, roadmap | ✅ validée (D1/D3/D4 tranchées) |
+| **2** | Architecture définitive : 55 tables + RLS, OpenAPI (81 chemins / 114 opérations), 14 ADR | ✅ validée |
+| **3** | Monorepo, CI, domaine de base, schémas partagés, runner de migrations, API minimale, console | ✅ **livrée** |
+| 4 | Identité visuelle, design system, landing page | ⏳ en attente (nom du produit requis) |
+| 5 → 16 | Auth, base de données, API métier, WhatsApp, IA, conversations, campagnes, facturation, back-office, i18n, tests, déploiement | ⏳ |
 
-**La règle appliquée :** aucune phase ne démarre sans validation explicite (exigence du cahier des charges).
+Aucune phase ne démarre sans validation explicite.
 
 ---
 
-## 2. Documents de la Phase 1
+## 2. Démarrage rapide
+
+```bash
+pnpm install
+pnpm run check            # typecheck + lint + tests + build  (doit être vert)
+
+pnpm --filter @whatsauto/api dev     # API sur http://localhost:8787
+pnpm --filter @whatsauto/web dev     # console sur http://localhost:5173
+```
+
+Migrations (dès qu'une base Postgres est disponible) :
+
+```bash
+DATABASE_URL_SERVICE='postgres://…' pnpm --filter @whatsauto/db migrate
+```
+
+Autres commandes : `pnpm run openapi:validate`, `pnpm run secrets:scan`,
+`pnpm run test`, `pnpm run format`.
+
+---
+
+## 3. Structure
+
+```
+apps/api        Worker Hono — routes REST, /health, /meta, erreurs uniformes
+apps/worker     Worker de traitement — consommateur de file + cron
+apps/web        SPA React 19 + Vite + Tailwind 4 — console
+packages/core   Domaine pur : téléphone E.164, monnaie, fenêtre 24 h, quotas, erreurs
+packages/contracts  Schémas Zod partagés front/back
+packages/db     Runner de migrations portable + SQL versionné + tests PGlite
+```
+
+Détail des choix, frontières de packages et dette assumée : [`docs/10-monorepo.md`](docs/10-monorepo.md).
+
+---
+
+## 4. Documentation
 
 | Document | Contenu |
 |---|---|
-| [`docs/00-audit-environnement.md`](docs/00-audit-environnement.md) | Audit mesuré du sandbox, de la connectivité, du dépôt ; procédure d'audit de votre machine Windows |
-| [`docs/01-faisabilite-meta.md`](docs/01-faisabilite-meta.md) | Faisabilité WhatsApp/Meta, contraintes Embedded Signup & Tech Provider, **périmètre autorisé de l'IA**, économie des messages, faisabilité IA, conformité, paiements |
-| [`docs/02-architecture-cible.md`](docs/02-architecture-cible.md) | Monorepo, multi-tenant, modèle de données, API, couche WhatsApp, couche IA, jobs, facturation, sécurité, i18n, paliers de charge, CI/CD |
-| [`docs/03-budget-modele-economique.md`](docs/03-budget-modele-economique.md) | Offres gratuites et **leurs limites réelles**, budget à 0 / 10 / 100 clients, grille tarifaire, risques de marge |
-| [`docs/04-risques.md`](docs/04-risques.md) | 28 risques qualifiés (probabilité × impact), mitigations, priorités |
-| [`docs/05-roadmap.md`](docs/05-roadmap.md) | Séquencement des 16 phases, livrables, critères de sortie, estimations en jours-homme, périmètre du MVP |
-| [`docs/06-decisions-a-valider.md`](docs/06-decisions-a-valider.md) | **14 décisions** à trancher avant la suite (4 bloquantes) |
-| [`docs/07-modele-donnees.md`](docs/07-modele-donnees.md) | Modèle de données définitif : 55 tables, colonnes, contraintes, index, politiques RLS, invariants, dimensionnement |
-| [`docs/08-api-openapi.yaml`](docs/08-api-openapi.yaml) | Contrat OpenAPI 3.1 de l'API (source de vérité des types et des tests) |
-| [`docs/09-adr.md`](docs/09-adr.md) | 14 décisions d'architecture (ADR) avec alternatives écartées |
-| [`scripts/audit-windows.ps1`](scripts/audit-windows.ps1) | Audit en **lecture seule** de votre machine Windows |
-| [`scripts/validate-openapi.sh`](scripts/validate-openapi.sh) | Validation du contrat OpenAPI (intégrée à la CI en Phase 3) |
+| [`docs/00-audit-environnement.md`](docs/00-audit-environnement.md) | Audit mesuré, connectivité, procédure d'audit Windows |
+| [`docs/01-faisabilite-meta.md`](docs/01-faisabilite-meta.md) | Tech Provider / Embedded Signup, **périmètre autorisé de l'IA**, tarification par message, paiements |
+| [`docs/02-architecture-cible.md`](docs/02-architecture-cible.md) | Monorepo, multi-tenant, couches WhatsApp/IA, jobs, paliers de charge |
+| [`docs/03-budget-modele-economique.md`](docs/03-budget-modele-economique.md) | Limites réelles des offres gratuites, budget à 0/10/100 clients, grille tarifaire |
+| [`docs/04-risques.md`](docs/04-risques.md) | 28 risques qualifiés et mitigations |
+| [`docs/05-roadmap.md`](docs/05-roadmap.md) | 16 phases, critères de sortie, MVP commercialisable |
+| [`docs/06-decisions-a-valider.md`](docs/06-decisions-a-valider.md) | Décisions tranchées + celles à venir |
+| [`docs/07-modele-donnees.md`](docs/07-modele-donnees.md) | 55 tables, index, politiques RLS, invariants, dimensionnement |
+| [`docs/08-api-openapi.yaml`](docs/08-api-openapi.yaml) | Contrat OpenAPI 3.1 (validé en CI) |
+| [`docs/09-adr.md`](docs/09-adr.md) | 14 décisions d'architecture |
+| [`docs/10-monorepo.md`](docs/10-monorepo.md) | Phase 3 : structure, commandes, tests, CI, dette |
+
+Outils : [`scripts/audit-windows.ps1`](scripts/audit-windows.ps1) (lecture seule),
+[`scripts/validate-openapi.sh`](scripts/validate-openapi.sh), [`scripts/scan-secrets.mjs`](scripts/scan-secrets.mjs).
 
 ---
 
-## 3. Trois conclusions de la Phase 1 à retenir
+## 5. Trois contraintes qui structurent tout le produit
 
-1. **Le risque n'est pas technique, il est économique et réglementaire.** Depuis le 1er octobre 2026, Meta facture les messages de service — donc chaque réponse de l'IA a un coût variable. Si la plateforme paie ces frais à la place des clients, un seul client européen rend un abonnement déficitaire. → **Le client doit payer Meta directement** (décision D1).
-2. **L'IA sur WhatsApp est autorisée, mais uniquement au service d'une tâche métier de l'entreprise.** Un assistant généraliste est interdit. Les garde-fous doivent être **dans le code**, pas seulement dans les CGU.
-3. **Le budget de démarrage est réellement proche de zéro** (~2–5 USD/mois, uniquement la clé IA payante), mais **l'offre gratuite Supabase n'est pas exploitable en production payante** (pause après 7 jours, aucune sauvegarde). Le passage à 25 USD/mois doit être déclenché par le premier client, pas avant.
-
----
-
-## 4. Stack prévue (à valider en Phase 2)
-
-**Frontend :** React + TypeScript + Vite + Tailwind CSS + shadcn/ui + React Router + TanStack Query + i18next (RTL inclus).
-**Backend :** Cloudflare Workers + Hono, API REST versionnée, Cloudflare Queues, Cron Triggers.
-**Données :** PostgreSQL (Supabase), Row Level Security, migrations SQL versionnées, `pgvector` pour la base de connaissances, PGlite pour les tests hors-ligne.
-**IA :** couche d'abstraction multi-fournisseurs, Gemini en premier (tier payant), garde-fous de périmètre, RAG ancré, quotas et journalisation des coûts.
-**WhatsApp :** WhatsApp Cloud API + Meta Embedded Signup uniquement. **Aucune API non officielle.**
-**Paiement :** abstraction `BillingProvider` (manuel → Paddle → CinetPay/Flutterwave). Aucune dépendance à un seul prestataire.
-**CI/CD :** GitHub Actions, environnements local / preview / staging / production, secrets hors dépôt.
+1. **Le client paie Meta, pas nous** (décision D1). Depuis le 01/10/2026, chaque réponse de l'IA est un message facturé : 0,004 USD vers l'Afrique de l'Ouest, jusqu'à 0,055 USD vers l'Allemagne. Porter ce coût détruirait la marge. La plateforme le **mesure et l'affiche**, sans le refacturer.
+2. **L'IA doit rester strictement métier.** Les conditions Meta interdisent un assistant généraliste comme fonctionnalité principale. Les garde-fous (périmètre, refus, transfert humain, divulgation) sont dans le code, pas seulement dans les CGU.
+3. **L'offre gratuite ne suffit pas en production.** Supabase gratuit = 500 Mo, aucune sauvegarde, pause après 7 jours d'inactivité. Le passage en Pro (25 USD) doit être déclenché par le premier client payant, pas avant.
 
 ---
 
-## 5. Règles absolues du projet
+## 6. Règles absolues du projet
 
-- Pas de code fictif présenté comme fonctionnel.
-- Pas de bouton décoratif sans action.
-- Pas de données inventées : aucun faux client, faux chiffre, faux témoignage, fausse certification.
-- Pas de secret dans le frontend ni dans le dépôt.
-- Pas de fausse connexion WhatsApp, pas de fausse facturation, pas de fausses statistiques.
-- Aucun mélange de données entre entreprises (RLS + tests d'isolation automatisés).
-- Aucune API non officielle, aucun contournement des règles Meta ni des limites de débit.
+- Pas de code fictif présenté comme fonctionnel ; pas de bouton décoratif ; pas de données inventées.
+- Aucun secret dans le dépôt ni dans le bundle frontend (scanner exécuté en CI).
+- Aucun mélange de données entre entreprises (RLS + tests d'isolation croisée).
+- Aucune API WhatsApp non officielle, aucun contournement des règles ni des limites Meta.
 - Aucune fonctionnalité supprimée sans validation.
 
 ---
 
-## 6. Décisions validées le 31 octobre 2026
-
-| Réf. | Décision |
-|---|---|
-| **D1** | **Le client paie Meta directement** (marge SaaS ~94 %, aucun risque pays) |
-| **D3** | **Facturation manuelle, puis Paddle (international) + CinetPay (zone XOF)** |
-| **D4** | **Afrique de l'Ouest francophone en priorité** (FR par défaut, prix en XOF, `Africa/Niamey`) |
-
 ## 7. Prochaine étape
 
-1. Relire [`docs/07-modele-donnees.md`](docs/07-modele-donnees.md) et [`docs/09-adr.md`](docs/09-adr.md) (points à confirmer : ADR-011 Kysely, durées de conservation, verticales interdites).
-2. Valider la Phase 2 pour lancer la **Phase 3** (monorepo pnpm + turbo, TypeScript strict, CI GitHub Actions, tests de migrations sous PGlite).
+Phase 4 (identité visuelle et landing page) démarre après votre validation et le choix du **nom du produit** (décision D10) — le nom, le domaine et les couleurs sont configurables et ne doivent pas contenir « WhatsApp ».
 
-**Vérification du contrat d'API :**
-```bash
-./scripts/validate-openapi.sh
-```
-
----
-
-*Documentation rédigée le 31 octobre 2026. Les tarifs, quotas et politiques cités portent leur date de relevé et doivent être re-vérifiés aux sources officielles avant tout engagement commercial.*
+*Documentation et code au 31 octobre 2026. Les tarifs, quotas et politiques cités portent leur date de relevé et doivent être revérifiés aux sources officielles avant tout engagement commercial.*

@@ -1,0 +1,35 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-brand-50: oklch(0.97 0.02 150);
+  --color-brand-500: oklch(0.72 0.16 150);
+  --color-brand-600: oklch(0.63 0.15 150);
+  --color-brand-700: oklch(0.53 0.13 150);
+}
+
+/* Thème clair/sombre appliqué par la classe `.dark` sur <html>. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    'Noto Sans',
+    sans-serif;
+}
+
+/* Support RTL : la disposition utilise des propriétés logiques. */
+[dir='rtl'] .logical-row {
+  flex-direction: row-reverse;
+}

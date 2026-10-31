@@ -1,0 +1,24 @@
+# Configuration Cloudflare Workers — traitement asynchrone
+name = "whatsauto-worker"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+[vars]
+ENVIRONMENT = "development"
+
+# La file sera déclarée en Phase 7, quand le premier producteur existera.
+# [[queues.producers]]
+# binding = "JOBS_QUEUE"
+# queue = "whatsauto-jobs"
+#
+# [[queues.consumers]]
+# queue = "whatsauto-jobs"
+# max_batch_size = 25
+# max_retries = 5
+#
+# [triggers]
+# crons = ["*/5 * * * *"]

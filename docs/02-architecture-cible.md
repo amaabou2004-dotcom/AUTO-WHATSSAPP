@@ -4,7 +4,7 @@
 > est dans **`07-modele-donnees.md`**, le contrat d'API dans **`08-api-openapi.yaml`**, les décisions dans **`09-adr.md`**.
 > **Nommage :** le tenant est l'`organization` ; la colonne d'isolation est **`organization_id`** (l'appellation `tenant_id` employée ci-dessous est un synonyme conceptuel). Rien de ce document n'est encore implémenté. Aucun composant décrit ici n'est présenté comme fonctionnel.
 > **Principe directeur :** un **monolithe modulaire** déployable sur l'offre gratuite, dont chaque module peut être extrait en service indépendant **sans réécriture du domaine** quand le volume le justifiera.
-> **Contrainte assumée :** le budget de départ est proche de zéro. L'architecture est donc dimensionnée pour **des dizaines de tenants**, pas pour des millions. Elle est *conçue* pour évoluer, pas *prétend* d'être déjà scalable. Les paliers de croissance sont au §12.
+> **Contrainte assumée :** le budget de départ est proche de zéro. L'architecture est donc dimensionnée pour **des dizaines de tenants**, pas pour des millions. Elle est _conçue_ pour évoluer, pas _prétend_ d'être déjà scalable. Les paliers de croissance sont au §12.
 
 ---
 
@@ -88,11 +88,11 @@ auto-whatsapp/                      (nom technique neutre, sans "WhatsApp" en ma
 
 ### 3.1 Modèle retenu : base unique, schéma unique, isolation par `tenant_id` + RLS
 
-| Option | Verdict | Raison |
-|---|---|---|
-| **Base unique + `tenant_id` + RLS Postgres** | ✅ **Retenu** | Coût et exploitation optimaux sur l'offre gratuite ; une seule migration à maintenir ; RLS = défense en profondeur |
-| Schéma par tenant | ❌ | Migrations ×N, plafond de schémas, outillage Supabase inadapté |
-| Base par tenant | ❌ (au lancement) | Coût, nombre de projets limité (2 sur l'offre gratuite), sauvegardes ×N. **Réservé à l'offre Enterprise** |
+| Option                                       | Verdict           | Raison                                                                                                             |
+| -------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Base unique + `tenant_id` + RLS Postgres** | ✅ **Retenu**     | Coût et exploitation optimaux sur l'offre gratuite ; une seule migration à maintenir ; RLS = défense en profondeur |
+| Schéma par tenant                            | ❌                | Migrations ×N, plafond de schémas, outillage Supabase inadapté                                                     |
+| Base par tenant                              | ❌ (au lancement) | Coût, nombre de projets limité (2 sur l'offre gratuite), sauvegardes ×N. **Réservé à l'offre Enterprise**          |
 
 **Chaîne d'isolation (4 couches, aucune ne doit être seule) :**
 
@@ -117,18 +117,18 @@ auto-whatsapp/                      (nom technique neutre, sans "WhatsApp" en ma
 
 Toutes les tables métier portent : `id uuid pk`, `tenant_id uuid not null`, `created_at`, `updated_at`, `created_by`, et éventuellement `deleted_at` (soft delete) — plus `version int` sur les entités à concurrence d'écriture (conversations, assistants).
 
-| Domaine | Tables | Notes clés |
-|---|---|---|
-| **Identité** | `profiles`, `organizations`, `memberships`, `invitations`, `sessions`, `mfa_factors` | `profiles` lié à `auth.users` (Supabase) ; `sessions` gérées par Supabase, métadonnées d'appareil chez nous |
-| **Plateforme** | `platform_staff`, `feature_flags`, `plans`, `plan_features`, `price_books`, `price_book_entries`, `countries`, `locales`, `ai_providers`, `ai_models`, `audit_logs`, `support_tickets`, `incidents` | `plans`/`price_books` **configurables** : aucune offre en dur |
-| **Facturation** | `subscriptions`, `subscription_items`, `invoices`, `payments`, `payment_events`, `coupons`, `redemptions`, `usage_counters`, `usage_events` | `usage_events` = journal append-only ; `usage_counters` = agrégat par période (recalculable) |
-| **WhatsApp** | `wa_accounts`, `wa_phone_numbers`, `wa_tokens` (chiffrés), `wa_templates`, `wa_webhook_events` (idempotence), `wa_message_costs` | contrainte `unique(phone_number_id)` **globale** ; `wa_webhook_events.unique(meta_event_id)` pour l'idempotence |
-| **IA** | `ai_assistants`, `ai_instructions_versions`, `knowledge_documents`, `knowledge_chunks` (pgvector), `ai_runs` (tokens, coût, latence, garde-fous) | `ai_runs` = base du calcul de quotas *et* de la facture IA |
-| **Conversations** | `conversations`, `messages`, `message_attachments`, `conversation_assignments`, `internal_notes`, `tags`, `conversation_tags` | `messages` : index `(tenant_id, conversation_id, created_at desc)` ; **partitionnement** prévu au palier 3 |
-| **Contacts** | `contacts`, `contact_identities` (numéros), `contact_fields`, `contact_field_values`, `segments`, `segment_members`, `consents`, `opt_outs`, `suppression_list`, `imports`, `import_rows` | consentement **horodaté + sourcé** obligatoire avant toute campagne |
-| **Campagnes** | `campaigns`, `campaign_recipients`, `campaign_runs`, `message_batches` | `campaign_recipients.status` + `unique(campaign_id, contact_id)` = idempotence |
-| **Automatisations** | `automations`, `automation_nodes`, `automation_edges`, `automation_runs`, `automation_steps` | exécution traçable, reprise après erreur |
-| **Notifications** | `notifications`, `notification_preferences`, `push_subscriptions` | |
+| Domaine             | Tables                                                                                                                                                                                              | Notes clés                                                                                                      |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Identité**        | `profiles`, `organizations`, `memberships`, `invitations`, `sessions`, `mfa_factors`                                                                                                                | `profiles` lié à `auth.users` (Supabase) ; `sessions` gérées par Supabase, métadonnées d'appareil chez nous     |
+| **Plateforme**      | `platform_staff`, `feature_flags`, `plans`, `plan_features`, `price_books`, `price_book_entries`, `countries`, `locales`, `ai_providers`, `ai_models`, `audit_logs`, `support_tickets`, `incidents` | `plans`/`price_books` **configurables** : aucune offre en dur                                                   |
+| **Facturation**     | `subscriptions`, `subscription_items`, `invoices`, `payments`, `payment_events`, `coupons`, `redemptions`, `usage_counters`, `usage_events`                                                         | `usage_events` = journal append-only ; `usage_counters` = agrégat par période (recalculable)                    |
+| **WhatsApp**        | `wa_accounts`, `wa_phone_numbers`, `wa_tokens` (chiffrés), `wa_templates`, `wa_webhook_events` (idempotence), `wa_message_costs`                                                                    | contrainte `unique(phone_number_id)` **globale** ; `wa_webhook_events.unique(meta_event_id)` pour l'idempotence |
+| **IA**              | `ai_assistants`, `ai_instructions_versions`, `knowledge_documents`, `knowledge_chunks` (pgvector), `ai_runs` (tokens, coût, latence, garde-fous)                                                    | `ai_runs` = base du calcul de quotas _et_ de la facture IA                                                      |
+| **Conversations**   | `conversations`, `messages`, `message_attachments`, `conversation_assignments`, `internal_notes`, `tags`, `conversation_tags`                                                                       | `messages` : index `(tenant_id, conversation_id, created_at desc)` ; **partitionnement** prévu au palier 3      |
+| **Contacts**        | `contacts`, `contact_identities` (numéros), `contact_fields`, `contact_field_values`, `segments`, `segment_members`, `consents`, `opt_outs`, `suppression_list`, `imports`, `import_rows`           | consentement **horodaté + sourcé** obligatoire avant toute campagne                                             |
+| **Campagnes**       | `campaigns`, `campaign_recipients`, `campaign_runs`, `message_batches`                                                                                                                              | `campaign_recipients.status` + `unique(campaign_id, contact_id)` = idempotence                                  |
+| **Automatisations** | `automations`, `automation_nodes`, `automation_edges`, `automation_runs`, `automation_steps`                                                                                                        | exécution traçable, reprise après erreur                                                                        |
+| **Notifications**   | `notifications`, `notification_preferences`, `push_subscriptions`                                                                                                                                   |                                                                                                                 |
 
 **Conventions :** `snake_case`, pluriel, `timestamptz` partout (UTC), jamais de `timestamp` naïf. Montants en **entiers de la plus petite unité** (`amount_minor bigint` + `currency char(3)`) — jamais de `float` pour de l'argent. Devise et langue stockées **par organisation** avec surcharge par contact.
 
@@ -227,12 +227,12 @@ message entrant
 
 ## 8. Jobs, files, temps
 
-| Mécanisme | Usage | Pourquoi |
-|---|---|---|
-| **Cloudflare Queues** | réponses IA, envois WhatsApp, imports, envois de campagnes | découplage, retries, backpressure ; 10 000 opérations/jour en gratuit |
-| **Cron Triggers** (5 max en gratuit) | reprise des `outbox` bloqués, relances planifiées, agrégation des quotas, purge/rétention, vérification des tokens WhatsApp expirant | filet de sécurité |
-| **Outbox en base** | toute action différée (campagne programmée, follow-up, automatisation avec délai) | survit à une panne de file, idempotent, auditable |
-| **SSE** (pas de WebSocket au lancement) | temps réel de la boîte de réception | compatible Workers + SPA sans serveur persistant ; repli polling TanStack Query |
+| Mécanisme                               | Usage                                                                                                                                | Pourquoi                                                                        |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| **Cloudflare Queues**                   | réponses IA, envois WhatsApp, imports, envois de campagnes                                                                           | découplage, retries, backpressure ; 10 000 opérations/jour en gratuit           |
+| **Cron Triggers** (5 max en gratuit)    | reprise des `outbox` bloqués, relances planifiées, agrégation des quotas, purge/rétention, vérification des tokens WhatsApp expirant | filet de sécurité                                                               |
+| **Outbox en base**                      | toute action différée (campagne programmée, follow-up, automatisation avec délai)                                                    | survit à une panne de file, idempotent, auditable                               |
+| **SSE** (pas de WebSocket au lancement) | temps réel de la boîte de réception                                                                                                  | compatible Workers + SPA sans serveur persistant ; repli polling TanStack Query |
 
 **Règle :** un job est **idempotent** (clé unique de traitement), **observable** (statut + tentatives + dernière erreur) et **reprenable** (relancé par cron après expiration d'un bail `locked_until`).
 
@@ -251,15 +251,19 @@ message entrant
 ## 10. Sécurité (résumé — détail Phase 15)
 
 ### 10.1 Contrôles de base
+
 Validation Zod systématique ; requêtes SQL **paramétrées uniquement** ; en-têtes de sécurité (CSP stricte, HSTS, `X-Content-Type-Options`…) ; CORS par liste d'origines ; rate limiting (par IP, par tenant, par route sensible) ; verrouillage progressif des connexions ; MFA TOTP ; sessions révocables ; secrets dans les secrets Workers/Cloudflare (jamais dans le repo, jamais dans le bundle frontend) ; dépendances auditées en CI (`npm audit` + `osv-scanner`) ; journaux **sans données personnelles** (redaction).
 
 ### 10.2 Webhooks entrants
+
 `X-Hub-Signature-256` vérifié en **temps constant** sur le **corps brut** ; rejet immédiat sinon ; idempotence par identifiant d'événement ; limitation de payload ; l'endpoint ne fait **que** persister + mettre en file.
 
 ### 10.3 Accès administrateur aux données clients
+
 Aucun accès implicite. Flux : demande motivée (ticket + justification + durée) → double validation (un autre `platform_admin`) → accès **en lecture seule**, **limité à un tenant et une période**, **expirant automatiquement**, **notifié au tenant** et **intégralement journalisé**. Toute tentative hors de ce flux est refusée, y compris pour le propriétaire de la plateforme. C'est une exigence du cahier des charges et un argument commercial.
 
 ### 10.4 Données sensibles
+
 Tokens WABA, secrets de fournisseurs : chiffrement enveloppe (AES-256-GCM, `key_id` en clair, clé en secret). Données personnelles : chiffrement au repos assuré par l'hébergeur (Postgres Supabase) ; pas de chiffrement applicatif colonne au lancement (impact sur la recherche), **décision tracée et documentée**. Export et suppression par tenant (droit à l'effacement) : endpoints dédiés + procédure documentée.
 
 ---
@@ -275,13 +279,13 @@ Tokens WABA, secrets de fournisseurs : chiffrement enveloppe (AES-256-GCM, `key_
 
 ## 12. Paliers de charge (conçu pour évoluer, pas livré)
 
-| Palier | Charge visée | Architecture | Actions déclenchées |
-|---|---|---|---|
-| **P0 — Lancement** | 1–100 tenants, < 50 k msgs/mois | Workers gratuit, Supabase gratuit, Queues | Rien. Coût quasi nul |
-| **P1 — Premiers revenus** | 100–500 tenants | Workers Paid (5 $/mois), Supabase Pro (25 $/mois) | Sauvegardes, pas de pause, CPU 30 s, Quota IA |
-| **P2 — Croissance** | 500–5 000 tenants | Extraction du **consumer IA/envoi** en Worker dédié ; index partiels ; archivage des messages > 90 j ; cache KV | Partition de `messages` par mois ; read replica |
-| **P3 — Échelle** | 5 000–50 000 tenants | Découpage par domaine (messagerie / campagnes / facturation) ; pool de workers d'envoi par région Meta ; ClickHouse ou équivalent pour l'analytique | Séparer la lecture analytique de la base transactionnelle |
-| **P4 — Multi-région** | > 50 000 tenants | Bases régionales (UE, Amérique, Asie) + routage par `tenant.region` ; conformité résidence de données | Réplication, plan de reprise |
+| Palier                    | Charge visée                    | Architecture                                                                                                                                        | Actions déclenchées                                       |
+| ------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| **P0 — Lancement**        | 1–100 tenants, < 50 k msgs/mois | Workers gratuit, Supabase gratuit, Queues                                                                                                           | Rien. Coût quasi nul                                      |
+| **P1 — Premiers revenus** | 100–500 tenants                 | Workers Paid (5 $/mois), Supabase Pro (25 $/mois)                                                                                                   | Sauvegardes, pas de pause, CPU 30 s, Quota IA             |
+| **P2 — Croissance**       | 500–5 000 tenants               | Extraction du **consumer IA/envoi** en Worker dédié ; index partiels ; archivage des messages > 90 j ; cache KV                                     | Partition de `messages` par mois ; read replica           |
+| **P3 — Échelle**          | 5 000–50 000 tenants            | Découpage par domaine (messagerie / campagnes / facturation) ; pool de workers d'envoi par région Meta ; ClickHouse ou équivalent pour l'analytique | Séparer la lecture analytique de la base transactionnelle |
+| **P4 — Multi-région**     | > 50 000 tenants                | Bases régionales (UE, Amérique, Asie) + routage par `tenant.region` ; conformité résidence de données                                               | Réplication, plan de reprise                              |
 
 À chaque palier : **test de charge réel** (k6 ou Artillery en CI planifiée) et **mesure des coûts**, pas de supposition.
 
@@ -289,12 +293,12 @@ Tokens WABA, secrets de fournisseurs : chiffrement enveloppe (AES-256-GCM, `key_
 
 ## 13. CI/CD et environnements
 
-| Environnement | Où | Données | Accès |
-|---|---|---|---|
-| `local` | machine du fondateur (+ ce sandbox pour le code) | données de seed fictives | libre |
-| `preview` | Cloudflare Pages (une URL par PR) | données de seed | équipe |
-| `staging` | Workers + Supabase staging | données de test ; **un WABA de test Meta** | équipe |
-| `production` | Workers + Supabase prod | données réelles | restreint, `main` uniquement |
+| Environnement | Où                                               | Données                                    | Accès                        |
+| ------------- | ------------------------------------------------ | ------------------------------------------ | ---------------------------- |
+| `local`       | machine du fondateur (+ ce sandbox pour le code) | données de seed fictives                   | libre                        |
+| `preview`     | Cloudflare Pages (une URL par PR)                | données de seed                            | équipe                       |
+| `staging`     | Workers + Supabase staging                       | données de test ; **un WABA de test Meta** | équipe                       |
+| `production`  | Workers + Supabase prod                          | données réelles                            | restreint, `main` uniquement |
 
 **Pipeline (`ci.yml`)** sur chaque PR : `typecheck` → `lint` → `unit tests` → `migrations PGlite` → `tests d'isolation multi-tenant` → `build web + api` → `npm audit` → rapport. `deploy.yml` : `main` → staging automatique, production sur tag approuvé. Secrets GitHub, jamais dans le code. Branche `main` protégée.
 

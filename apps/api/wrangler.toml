@@ -1,0 +1,38 @@
+# Configuration Cloudflare Workers — API
+# Les secrets ne sont JAMAIS ici : `wrangler secret put <NOM>` ou variables
+# chiffrées du tableau de bord. Voir .env.example pour la liste des noms.
+
+name = "whatsauto-api"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[observability]
+enabled = true
+
+[vars]
+ENVIRONMENT = "development"
+APP_VERSION = "0.0.0"
+API_ALLOWED_ORIGINS = "http://localhost:5173"
+BRAND_NAME = "WhatsAuto AI"
+ENABLED_LOCALES = "fr,en"
+
+# Environnement de préproduction (déployé sur une branche dédiée)
+[env.staging]
+name = "whatsauto-api-staging"
+[env.staging.vars]
+ENVIRONMENT = "staging"
+APP_VERSION = "0.0.0"
+API_ALLOWED_ORIGINS = "https://staging.example.com"
+BRAND_NAME = "WhatsAuto AI"
+ENABLED_LOCALES = "fr,en"
+
+# Production : le domaine et les origines seront renseignés en Phase 16.
+[env.production]
+name = "whatsauto-api-production"
+[env.production.vars]
+ENVIRONMENT = "production"
+APP_VERSION = "0.0.0"
+API_ALLOWED_ORIGINS = ""
+BRAND_NAME = "WhatsAuto AI"
+ENABLED_LOCALES = "fr,en"
