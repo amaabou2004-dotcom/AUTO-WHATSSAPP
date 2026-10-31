@@ -1,6 +1,8 @@
 # PHASE 2 (avant-projet) — Architecture technique cible
 
-> **Statut :** proposition à valider. Rien de ce document n'est encore implémenté. Aucun composant décrit ici n'est présenté comme fonctionnel.
+> **Statut :** architecture validée pour la Phase 2. Le détail physique (colonnes, index, politiques RLS)
+> est dans **`07-modele-donnees.md`**, le contrat d'API dans **`08-api-openapi.yaml`**, les décisions dans **`09-adr.md`**.
+> **Nommage :** le tenant est l'`organization` ; la colonne d'isolation est **`organization_id`** (l'appellation `tenant_id` employée ci-dessous est un synonyme conceptuel). Rien de ce document n'est encore implémenté. Aucun composant décrit ici n'est présenté comme fonctionnel.
 > **Principe directeur :** un **monolithe modulaire** déployable sur l'offre gratuite, dont chaque module peut être extrait en service indépendant **sans réécriture du domaine** quand le volume le justifiera.
 > **Contrainte assumée :** le budget de départ est proche de zéro. L'architecture est donc dimensionnée pour **des dizaines de tenants**, pas pour des millions. Elle est *conçue* pour évoluer, pas *prétend* d'être déjà scalable. Les paliers de croissance sont au §12.
 
@@ -94,8 +96,8 @@ auto-whatsapp/                      (nom technique neutre, sans "WhatsApp" en ma
 
 **Chaîne d'isolation (4 couches, aucune ne doit être seule) :**
 
-1. **JWT Supabase** → `app_metadata.tenant_id`, `app_metadata.role`, `app_metadata.member_id` (signés, non modifiables par l'utilisateur).
-2. **Politiques RLS** sur **toutes** les tables métier : `USING (tenant_id = auth.jwt() -> 'app_metadata' ->> 'tenant_id'::uuid)`.
+1. **JWT Supabase** → `app_metadata.organization_id`, `app_metadata.role`, `app_metadata.member_id` (signés, non modifiables par l'utilisateur).
+2. **Politiques RLS** sur **toutes** les tables métier : `USING (organization_id = app.current_organization_id())`.
 3. **Couche repository** : chaque requête exige un `TenantContext` typé ; le contexte est **obligatoire au niveau du type TypeScript** (`repository.conversations(ctx, …)`), pas une variable globale.
 4. **Tests d'isolation** automatisés : suite de tests qui tente, pour chaque endpoint et chaque table, un accès croisé entre deux tenants et **doit** obtenir `403`/`0 ligne`. Ce test fait partie de la CI (Phase 6 et Phase 15).
 

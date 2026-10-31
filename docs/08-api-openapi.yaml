@@ -1,0 +1,3214 @@
+openapi: 3.1.0
+info:
+  title: WhatsAuto AI — API
+  version: 0.1.0
+  description: |
+    Spécification de l'API REST de la plateforme (Phase 2). **Aucune de ces opérations n'est
+    implémentée à ce stade.** Ce contrat est la source de vérité pour la génération des types
+    (`packages/contracts`) et pour les tests d'intégration des Phases 5 à 13.
+
+    Conventions :
+    - Toutes les routes sont préfixées par `/api/v1`.
+    - Authentification : JWT Supabase (`Authorization: Bearer <token>`).
+    - Le tenant est porté par le JWT (`app_metadata.organization_id`) et vérifié à chaque requête.
+      L'en-tête `X-Organization-Id` est **toléré uniquement** pour changer d'espace actif, et il est
+      revalidé contre les memberships côté serveur.
+    - Pagination par curseur (`cursor`, `limit`), tri et filtres whitelistés.
+    - Toute réponse d'erreur respecte le schéma `Error`.
+    - Toute opération mutante accepte `Idempotency-Key`.
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: https://api.example.com/api/v1
+    description: Production (domaine configurable)
+  - url: http://localhost:8787/api/v1
+    description: Développement local (wrangler dev)
+
+tags:
+  - name: Auth
+  - name: Me
+  - name: Organizations
+  - name: WhatsApp
+  - name: Webhooks
+  - name: Conversations
+  - name: Contacts
+  - name: Campaigns
+  - name: Automations
+  - name: Assistants
+  - name: Analytics
+  - name: Billing
+  - name: Notifications
+  - name: Admin
+  - name: System
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ---------------------------------------------------------------- AUTH
+  /auth/signup:
+    post:
+      tags: [Auth]
+      summary: Créer un compte (e-mail + mot de passe)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, full_name]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 12, maxLength: 128 }
+                full_name: { type: string, minLength: 2, maxLength: 100 }
+                locale: { type: string, default: fr }
+                accept_terms: { type: boolean, const: true }
+      responses:
+        "201":
+          description: Compte créé, e-mail de vérification envoyé
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthSession" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Connexion par e-mail
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+                mfa_code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "200":
+          description: Session ouverte, ou MFA requise
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/AuthSession"
+                  - $ref: "#/components/schemas/MfaRequired"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Rafraîchir la session
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200":
+          description: Nouvelle session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthSession" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Fermer la session courante (ou toutes les sessions)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                all_sessions: { type: boolean, default: false }
+      responses:
+        "204": { description: Session fermée }
+
+  /auth/password/forgot:
+    post:
+      tags: [Auth]
+      summary: Demander la réinitialisation du mot de passe
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        "202":
+          description: |
+            Toujours 202, que l'e-mail existe ou non (anti-énumération de comptes).
+        "429": { $ref: "#/components/responses/TooManyRequests" }
+
+  /auth/password/reset:
+    post:
+      tags: [Auth]
+      summary: Réinitialiser le mot de passe avec un jeton
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token: { type: string }
+                password: { type: string, minLength: 12, maxLength: 128 }
+      responses:
+        "204": { description: "Mot de passe modifié, sessions révoquées" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /auth/oauth/google/start:
+    get:
+      tags: [Auth]
+      summary: Démarrer la connexion Google OAuth
+      security: []
+      parameters:
+        - name: redirect_uri
+          in: query
+          schema: { type: string, format: uri }
+      responses:
+        "200":
+          description: URL d'autorisation Google + état signé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  authorization_url: { type: string, format: uri }
+                  state: { type: string }
+
+  /auth/oauth/google/callback:
+    post:
+      tags: [Auth]
+      summary: Terminer la connexion Google OAuth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, state]
+              properties:
+                code: { type: string }
+                state: { type: string }
+      responses:
+        "200":
+          description: Session ouverte
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthSession" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /auth/mfa/enroll:
+    post:
+      tags: [Auth]
+      summary: Initialiser l'enrôlement TOTP
+      responses:
+        "200":
+          description: Secret TOTP et URI otpauth (affiché une seule fois)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret: { type: string }
+                  otpauth_uri: { type: string }
+                  recovery_codes:
+                    type: array
+                    items: { type: string }
+
+  /auth/mfa/verify:
+    post:
+      tags: [Auth]
+      summary: Confirmer l'enrôlement TOTP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "204": { description: MFA activé }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /auth/sessions:
+    get:
+      tags: [Auth]
+      summary: Lister mes sessions actives
+      responses:
+        "200":
+          description: Sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/SessionInfo" }
+
+  /auth/sessions/{sessionId}:
+    delete:
+      tags: [Auth]
+      summary: Révoquer une session
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "204": { description: Session révoquée }
+
+  # ---------------------------------------------------------------- ME
+  /me:
+    get:
+      tags: [Me]
+      summary: Profil et espaces de l'utilisateur courant
+      responses:
+        "200":
+          description: Profil
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+    patch:
+      tags: [Me]
+      summary: Mettre à jour son profil
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name: { type: string, maxLength: 100 }
+                locale: { type: string }
+                timezone: { type: string }
+                avatar_url: { type: string, format: uri }
+      responses:
+        "200":
+          description: Profil mis à jour
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  # -------------------------------------------------------- ORGANIZATIONS
+  /organizations:
+    get:
+      tags: [Organizations]
+      summary: Lister mes espaces professionnels
+      responses:
+        "200":
+          description: Espaces
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Organization" }
+    post:
+      tags: [Organizations]
+      summary: Créer un espace professionnel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, country_code]
+              properties:
+                name: { type: string, minLength: 2, maxLength: 80 }
+                country_code: { type: string, pattern: "^[A-Z]{2}$" }
+                timezone: { type: string }
+                locale: { type: string }
+                currency: { type: string, pattern: "^[A-Z]{3}$" }
+      responses:
+        "201":
+          description: Espace créé (propriétaire = utilisateur courant)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Organization" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+
+  /organizations/{organizationId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Organizations]
+      summary: Détail d'un espace
+      responses:
+        "200":
+          description: Espace
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Organization" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Organizations]
+      summary: Mettre à jour un espace (admin+)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 80 }
+                logo_url: { type: string, format: uri }
+                timezone: { type: string }
+                locale: { type: string }
+                settings: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: Espace mis à jour
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Organization" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /organizations/{organizationId}/members:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Organizations]
+      summary: Lister les membres
+      responses:
+        "200":
+          description: Membres
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Member" }
+
+  /organizations/{organizationId}/members/{userId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/UserId"
+    patch:
+      tags: [Organizations]
+      summary: Changer le rôle d'un membre (admin+, jamais owner)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { $ref: "#/components/schemas/MemberRole" }
+      responses:
+        "200":
+          description: Membre mis à jour
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Member" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+    delete:
+      tags: [Organizations]
+      summary: Retirer un membre (admin+)
+      responses:
+        "204": { description: Membre retiré }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /organizations/{organizationId}/invitations:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Organizations]
+      summary: Lister les invitations en attente
+      responses:
+        "200":
+          description: Invitations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Invitation" }
+    post:
+      tags: [Organizations]
+      summary: Inviter un collaborateur
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string, format: email }
+                role: { $ref: "#/components/schemas/MemberRole" }
+      responses:
+        "201":
+          description: Invitation créée et e-mail envoyé
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invitation" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /invitations/{invitationId}:
+    parameters:
+      - name: invitationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Organizations]
+      summary: Révoquer une invitation
+      responses:
+        "204": { description: Invitation révoquée }
+
+  /invitations/{token}/accept:
+    post:
+      tags: [Organizations]
+      summary: Accepter une invitation
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Membre ajouté
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Member" }
+        "410": { description: Invitation expirée ou déjà utilisée }
+
+  # ---------------------------------------------------------------- WHATSAPP
+  /organizations/{organizationId}/whatsapp/connect:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    post:
+      tags: [WhatsApp]
+      summary: Préparer la fenêtre Embedded Signup
+      description: |
+        Renvoie l'identifiant de configuration Embedded Signup et l'état signé.
+        La fenêtre est ensuite ouverte **côté navigateur par le SDK Meta** ; aucun jeton
+        n'est manipulé par le frontend.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                locale: { type: string }
+      responses:
+        "200":
+          description: Configuration à passer au SDK Meta
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  app_id: { type: string }
+                  config_id: { type: string }
+                  state: { type: string }
+                  expires_at: { type: string, format: date-time }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+
+  /organizations/{organizationId}/whatsapp/oauth/callback:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    post:
+      tags: [WhatsApp]
+      summary: Échanger le code Embedded Signup et enregistrer le compte
+      description: |
+        Échange serveur-à-serveur (`code` → jeton longue durée), puis stockage **chiffré**.
+        Le jeton n'est jamais renvoyé au client.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, state]
+              properties:
+                code: { type: string }
+                state: { type: string }
+                waba_id: { type: string }
+                phone_number_id: { type: string }
+      responses:
+        "201":
+          description: Compte WhatsApp connecté
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WhatsAppAccount" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /organizations/{organizationId}/whatsapp/accounts:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [WhatsApp]
+      summary: Tableau de bord des connexions
+      responses:
+        "200":
+          description: Comptes et numéros
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/WhatsAppAccount" }
+
+  /organizations/{organizationId}/whatsapp/accounts/{accountId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/AccountId"
+    get:
+      tags: [WhatsApp]
+      summary: Détail d'un compte WhatsApp
+      responses:
+        "200":
+          description: Compte
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WhatsAppAccount" }
+    delete:
+      tags: [WhatsApp]
+      summary: Déconnecter un compte (révocation des jetons)
+      responses:
+        "204": { description: "Compte déconnecté, jetons révoqués" }
+
+  /organizations/{organizationId}/whatsapp/accounts/{accountId}/sync:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/AccountId"
+    post:
+      tags: [WhatsApp]
+      summary: Resynchroniser métadonnées, qualité et limites depuis Meta
+      responses:
+        "202":
+          description: Synchronisation planifiée
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobAccepted" }
+
+  /organizations/{organizationId}/whatsapp/templates:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [WhatsApp]
+      summary: Lister les modèles de messages
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/TemplateStatus" }
+        - name: category
+          in: query
+          schema: { $ref: "#/components/schemas/TemplateCategory" }
+      responses:
+        "200":
+          description: Modèles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Template" }
+    post:
+      tags: [WhatsApp]
+      summary: Soumettre un modèle à Meta
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, language, category, components]
+              properties:
+                name: { type: string, pattern: "^[a-z0-9_]{1,512}$" }
+                language: { type: string }
+                category: { $ref: "#/components/schemas/TemplateCategory" }
+                components:
+                  type: array
+                  items: { type: object, additionalProperties: true }
+      responses:
+        "201":
+          description: Modèle créé en statut `pending`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Template" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /organizations/{organizationId}/whatsapp/templates/{templateId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - name: templateId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [WhatsApp]
+      summary: Supprimer un modèle local (Meta reste la source de vérité)
+      responses:
+        "204": { description: Modèle supprimé }
+
+  /organizations/{organizationId}/whatsapp/costs:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [WhatsApp]
+      summary: Coût Meta estimé (transparence)
+      description: |
+        Agrégat des `wa_message_costs` par catégorie et par pays du destinataire.
+        Ces montants sont payés par le client à Meta : ils ne sont **pas** facturés par la plateforme.
+      parameters:
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Estimation par catégorie et pays
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        country_code: { type: string }
+                        category: { type: string }
+                        messages: { type: integer }
+                        amount_minor: { type: integer, format: int64 }
+                        currency: { type: string }
+
+  # ---------------------------------------------------------------- WEBHOOKS
+  /webhooks/whatsapp:
+    get:
+      tags: [Webhooks]
+      summary: Vérification du webhook Meta (hub.challenge)
+      security: []
+      parameters:
+        - name: hub.mode
+          in: query
+          required: true
+          schema: { type: string, enum: [subscribe] }
+        - name: hub.verify_token
+          in: query
+          required: true
+          schema: { type: string }
+        - name: hub.challenge
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Le challenge est renvoyé en texte brut si le jeton est valide
+          content:
+            text/plain:
+              schema: { type: string }
+        "403": { description: Jeton de vérification invalide }
+    post:
+      tags: [Webhooks]
+      summary: Réception des événements Meta
+      description: |
+        Corps brut vérifié via `X-Hub-Signature-256` (HMAC-SHA256, comparaison en temps constant).
+        Réponse 200 **immédiate** : le traitement est délégué à la file. Idempotence assurée par
+        `wa_webhook_events.provider_event_id`.
+      security: []
+      parameters:
+        - name: X-Hub-Signature-256
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200": { description: Événement accepté (traitement asynchrone) }
+        "401": { description: Signature invalide }
+        "413": { description: Charge utile trop volumineuse }
+
+  /webhooks/billing/{provider}:
+    post:
+      tags: [Webhooks]
+      summary: Événements du prestataire de paiement
+      security: []
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [paddle, stripe, cinetpay, flutterwave]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200": { description: Événement accepté (idempotent) }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  # ----------------------------------------------------------- CONVERSATIONS
+  /organizations/{organizationId}/conversations:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Conversations]
+      summary: Boîte de réception (liste paginée)
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: "#/components/schemas/ConversationStatus" }
+        - name: assigned_user_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: priority
+          in: query
+          schema: { $ref: "#/components/schemas/ConversationPriority" }
+        - name: tag_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: q
+          in: query
+          description: Recherche texte (nom du contact, contenu des messages)
+          schema: { type: string, maxLength: 120 }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Conversations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Conversation" }
+                  next_cursor: { type: string, nullable: true }
+
+  /organizations/{organizationId}/conversations/{conversationId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/ConversationId"
+    get:
+      tags: [Conversations]
+      summary: Détail d'une conversation
+      responses:
+        "200":
+          description: Conversation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Conversation" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    patch:
+      tags: [Conversations]
+      summary: Mettre à jour statut, priorité, assignation ou IA
+      description: |
+        Contrôle de concurrence optimiste via `version`. Toute réassignation crée une ligne
+        dans l'historique des transferts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { $ref: "#/components/schemas/ConversationStatus" }
+                priority: { $ref: "#/components/schemas/ConversationPriority" }
+                assigned_user_id: { type: string, format: uuid, nullable: true }
+                ai_enabled: { type: boolean }
+                version: { type: integer }
+      responses:
+        "200":
+          description: Conversation mise à jour
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Conversation" }
+        "409":
+          description: Conflit de version (recharger la conversation)
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /organizations/{organizationId}/conversations/{conversationId}/messages:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/ConversationId"
+    get:
+      tags: [Conversations]
+      summary: Messages d'une conversation
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Messages (ordre antéchronologique par curseur)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Message" }
+                  next_cursor: { type: string, nullable: true }
+    post:
+      tags: [Conversations]
+      summary: Envoyer un message manuel
+      description: |
+        Hors fenêtre de 24 h, seuls les modèles approuvés sont acceptés (`template`).
+        La réponse `409 window_closed` documente le refus : l'UI propose alors un modèle.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/OutboundTextMessage"
+                - $ref: "#/components/schemas/OutboundTemplateMessage"
+      responses:
+        "202":
+          description: Message mis en file d'envoi
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Message" }
+        "409":
+          description: Fenêtre de 24 h fermée ou envoi bloqué (opt-out)
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /organizations/{organizationId}/conversations/{conversationId}/notes:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/ConversationId"
+    get:
+      tags: [Conversations]
+      summary: Notes internes
+      responses:
+        "200":
+          description: Notes (jamais envoyées au contact)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/InternalNote" }
+    post:
+      tags: [Conversations]
+      summary: Ajouter une note interne
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [body]
+              properties:
+                body: { type: string, minLength: 1, maxLength: 4000 }
+      responses:
+        "201":
+          description: Note créée
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InternalNote" }
+
+  /organizations/{organizationId}/conversations/{conversationId}/read:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/ConversationId"
+    post:
+      tags: [Conversations]
+      summary: Marquer la conversation comme lue
+      responses:
+        "204": { description: Compteur de non-lus remis à zéro }
+
+  /organizations/{organizationId}/stream:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Conversations]
+      summary: Flux temps réel (Server-Sent Events)
+      description: |
+        Événements : `message.created`, `message.status`, `conversation.updated`,
+        `notification.created`, `whatsapp.health`. Reconnexion avec `Last-Event-ID`.
+      responses:
+        "200":
+          description: Flux texte `text/event-stream`
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  # ---------------------------------------------------------------- CONTACTS
+  /organizations/{organizationId}/contacts:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Contacts]
+      summary: Lister / rechercher des contacts
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, maxLength: 120 }
+        - name: tag_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: consent
+          in: query
+          schema: { $ref: "#/components/schemas/ConsentState" }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Contacts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Contact" }
+                  next_cursor: { type: string, nullable: true }
+    post:
+      tags: [Contacts]
+      summary: Créer un contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone_e164]
+              properties:
+                phone_e164: { type: string, pattern: "^\\+[1-9][0-9]{6,14}$" }
+                display_name: { type: string, maxLength: 120 }
+                email: { type: string, format: email }
+                locale: { type: string }
+                consent:
+                  type: object
+                  properties:
+                    purpose: { $ref: "#/components/schemas/ConsentPurpose" }
+                    source: { $ref: "#/components/schemas/ConsentSource" }
+                    evidence: { type: object, additionalProperties: true }
+      responses:
+        "201":
+          description: Contact créé
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contact" }
+        "409": { $ref: "#/components/responses/Conflict" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /organizations/{organizationId}/contacts/{contactId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/ContactId"
+    get:
+      tags: [Contacts]
+      summary: Fiche contact (avec consentements et historique)
+      responses:
+        "200":
+          description: Contact
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContactDetail" }
+    patch:
+      tags: [Contacts]
+      summary: Mettre à jour un contact
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name: { type: string, maxLength: 120 }
+                email: { type: string, format: email }
+                locale: { type: string }
+                status: { $ref: "#/components/schemas/ContactStatus" }
+                custom_fields:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          description: Contact mis à jour
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Contact" }
+    delete:
+      tags: [Contacts]
+      summary: Supprimer un contact (effacement logique + opt-out)
+      responses:
+        "204": { description: Contact supprimé }
+
+  /organizations/{organizationId}/contacts/{contactId}/consents:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/ContactId"
+    post:
+      tags: [Contacts]
+      summary: Enregistrer un consentement ou une révocation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, status, source]
+              properties:
+                purpose: { $ref: "#/components/schemas/ConsentPurpose" }
+                status: { $ref: "#/components/schemas/ConsentState" }
+                source: { $ref: "#/components/schemas/ConsentSource" }
+                evidence: { type: object, additionalProperties: true }
+      responses:
+        "201":
+          description: Consentement enregistré (horodatage serveur)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Consent" }
+
+  /organizations/{organizationId}/contacts/imports:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    post:
+      tags: [Contacts]
+      summary: Importer un fichier CSV/Excel
+      description: |
+        Deux étapes : (1) obtenir une URL d'upload signée, (2) créer le job d'import.
+        Détection des doublons selon `duplicate_strategy`. Le rapport d'erreurs est déposé sur R2.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filename, size_bytes, duplicate_strategy]
+              properties:
+                filename: { type: string }
+                size_bytes: { type: integer, maximum: 52428800 }
+                duplicate_strategy: { type: string, enum: [skip, update, merge] }
+                mapping:
+                  type: object
+                  additionalProperties: { type: string }
+      responses:
+        "201":
+          description: Job créé et URL d'upload signée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  import_id: { type: string, format: uuid }
+                  upload_url: { type: string, format: uri }
+                  expires_at: { type: string, format: date-time }
+
+  /organizations/{organizationId}/contacts/imports/{importId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - name: importId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Contacts]
+      summary: Suivre un import
+      responses:
+        "200":
+          description: État et compteurs
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Import" }
+
+  /organizations/{organizationId}/tags:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Contacts]
+      summary: Lister les étiquettes
+      responses:
+        "200":
+          description: Étiquettes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Tag" }
+    post:
+      tags: [Contacts]
+      summary: Créer une étiquette
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 40 }
+                color: { type: string, pattern: "^#[0-9A-Fa-f]{6}$" }
+      responses:
+        "201":
+          description: Étiquette créée
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Tag" }
+
+  /organizations/{organizationId}/segments:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Contacts]
+      summary: Lister les segments
+      responses:
+        "200":
+          description: Segments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Segment" }
+    post:
+      tags: [Contacts]
+      summary: Créer un segment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, kind, definition]
+              properties:
+                name: { type: string, maxLength: 80 }
+                kind: { type: string, enum: [static, dynamic] }
+                definition: { $ref: "#/components/schemas/SegmentDefinition" }
+      responses:
+        "201":
+          description: Segment créé
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Segment" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /organizations/{organizationId}/opt-outs:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Contacts]
+      summary: Liste d'exclusion
+      responses:
+        "200":
+          description: Numéros exclus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/OptOut" }
+    post:
+      tags: [Contacts]
+      summary: Ajouter un numéro à la liste d'exclusion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone_e164]
+              properties:
+                phone_e164: { type: string }
+                reason: { type: string, maxLength: 200 }
+      responses:
+        "201":
+          description: Numéro exclu
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OptOut" }
+
+  # --------------------------------------------------------------- CAMPAIGNS
+  /organizations/{organizationId}/campaigns:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Campaigns]
+      summary: Lister les campagnes
+      responses:
+        "200":
+          description: Campagnes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Campaign" }
+    post:
+      tags: [Campaigns]
+      summary: Créer une campagne
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CampaignInput" }
+      responses:
+        "201":
+          description: Campagne créée (statut `draft`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Campaign" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /organizations/{organizationId}/campaigns/{campaignId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/CampaignId"
+    get:
+      tags: [Campaigns]
+      summary: Détail et statistiques d'une campagne
+      responses:
+        "200":
+          description: Campagne
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Campaign" }
+    patch:
+      tags: [Campaigns]
+      summary: Modifier une campagne en brouillon
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CampaignInput" }
+      responses:
+        "200":
+          description: Campagne mise à jour
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Campaign" }
+        "409": { description: Campagne déjà démarrée (non modifiable) }
+    delete:
+      tags: [Campaigns]
+      summary: Supprimer une campagne en brouillon
+      responses:
+        "204": { description: Campagne supprimée }
+        "409": { description: Campagne en cours (utiliser /cancel) }
+
+  /organizations/{organizationId}/campaigns/{campaignId}/preview:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/CampaignId"
+    post:
+      tags: [Campaigns]
+      summary: Prévisualiser les destinataires éligibles
+      description: |
+        Retourne le nombre de destinataires **éligibles** (consentement marketing valide, hors
+        opt-out, hors fenêtre de suppression) et le nombre de destinataires **exclus**, avec les
+        motifs. Aucun message n'est envoyé.
+      responses:
+        "200":
+          description: Aperçu
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  eligible: { type: integer }
+                  excluded:
+                    type: object
+                    properties:
+                      no_consent: { type: integer }
+                      opted_out: { type: integer }
+                      invalid_number: { type: integer }
+                  sample:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        phone_e164: { type: string }
+                        display_name: { type: string }
+                        rendered_body: { type: string }
+
+  /organizations/{organizationId}/campaigns/{campaignId}/schedule:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/CampaignId"
+    post:
+      tags: [Campaigns]
+      summary: Programmer une campagne
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scheduled_at, timezone]
+              properties:
+                scheduled_at: { type: string, format: date-time }
+                timezone: { type: string }
+      responses:
+        "202":
+          description: Campagne programmée
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Campaign" }
+        "409":
+          description: Modèle non approuvé, ou aucun destinataire éligible
+
+  /organizations/{organizationId}/campaigns/{campaignId}/{action}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/CampaignId"
+      - name: action
+        in: path
+        required: true
+        schema: { type: string, enum: [pause, resume, cancel] }
+    post:
+      tags: [Campaigns]
+      summary: Mettre en pause, reprendre ou annuler
+      responses:
+        "202":
+          description: Action acceptée
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Campaign" }
+        "409": { description: Transition d'état invalide }
+
+  /organizations/{organizationId}/campaigns/{campaignId}/recipients:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/CampaignId"
+    get:
+      tags: [Campaigns]
+      summary: Destinataires et statuts d'envoi
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Destinataires
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/CampaignRecipient" }
+                  next_cursor: { type: string, nullable: true }
+
+  # ------------------------------------------------------------ AUTOMATIONS
+  /organizations/{organizationId}/automations:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Automations]
+      summary: Lister les automatisations
+      responses:
+        "200":
+          description: Automatisations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Automation" }
+    post:
+      tags: [Automations]
+      summary: Créer une automatisation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, trigger_type, definition]
+              properties:
+                name: { type: string, maxLength: 80 }
+                trigger_type: { $ref: "#/components/schemas/AutomationTrigger" }
+                definition: { $ref: "#/components/schemas/AutomationDefinition" }
+      responses:
+        "201":
+          description: Automatisation créée
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Automation" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /organizations/{organizationId}/automations/{automationId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/AutomationId"
+    get:
+      tags: [Automations]
+      summary: Détail d'une automatisation
+      responses:
+        "200":
+          description: Automatisation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Automation" }
+    patch:
+      tags: [Automations]
+      summary: Modifier une automatisation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                definition: { $ref: "#/components/schemas/AutomationDefinition" }
+                status: { type: string, enum: [draft, active, paused, archived] }
+      responses:
+        "200":
+          description: Automatisation mise à jour
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Automation" }
+    delete:
+      tags: [Automations]
+      summary: Supprimer une automatisation
+      responses:
+        "204": { description: Automatisation supprimée }
+
+  /organizations/{organizationId}/automations/{automationId}/runs:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/AutomationId"
+    get:
+      tags: [Automations]
+      summary: Historique d'exécution
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [queued, running, done, failed, canceled] }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Exécutions et étapes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/AutomationRun" }
+
+  # -------------------------------------------------------------- ASSISTANTS
+  /organizations/{organizationId}/assistants:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Assistants]
+      summary: Lister les assistants IA
+      responses:
+        "200":
+          description: Assistants
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Assistant" }
+    post:
+      tags: [Assistants]
+      summary: Créer un assistant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AssistantInput" }
+      responses:
+        "201":
+          description: Assistant créé
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Assistant" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+        "422": { $ref: "#/components/responses/ValidationError" }
+
+  /organizations/{organizationId}/assistants/{assistantId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/AssistantId"
+    get:
+      tags: [Assistants]
+      summary: Configuration complète de l'assistant
+      responses:
+        "200":
+          description: Assistant
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Assistant" }
+    patch:
+      tags: [Assistants]
+      summary: Mettre à jour l'assistant (crée une version)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AssistantInput" }
+      responses:
+        "200":
+          description: Assistant mis à jour
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Assistant" }
+    delete:
+      tags: [Assistants]
+      summary: Supprimer un assistant
+      responses:
+        "204": { description: Assistant supprimé }
+
+  /organizations/{organizationId}/assistants/{assistantId}/knowledge:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/AssistantId"
+    get:
+      tags: [Assistants]
+      summary: Lister les documents de connaissance
+      responses:
+        "200":
+          description: Documents et état d'indexation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/KnowledgeDocument" }
+    post:
+      tags: [Assistants]
+      summary: Ajouter un document (upload via URL signée)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, source_type]
+              properties:
+                title: { type: string, maxLength: 200 }
+                source_type: { type: string, enum: [upload, url, manual, faq] }
+                filename: { type: string }
+                mime_type: { type: string }
+                size_bytes: { type: integer, maximum: 20971520 }
+                content: { type: string, description: Requis si source_type = manual ou faq }
+                url: { type: string, format: uri, description: Requis si source_type = url }
+      responses:
+        "201":
+          description: Document créé, indexation planifiée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  document: { $ref: "#/components/schemas/KnowledgeDocument" }
+                  upload_url: { type: string, format: uri, nullable: true }
+
+  /organizations/{organizationId}/assistants/{assistantId}/knowledge/{documentId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/AssistantId"
+      - name: documentId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Assistants]
+      summary: Supprimer un document et ses vecteurs
+      responses:
+        "204": { description: Document supprimé }
+
+  /organizations/{organizationId}/assistants/{assistantId}/test:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - $ref: "#/components/parameters/AssistantId"
+    post:
+      tags: [Assistants]
+      summary: Tester l'assistant (banc d'essai, aucun envoi WhatsApp)
+      description: |
+        Exécute le pipeline complet (contexte, garde-fous, génération) **hors production**.
+        Répond `outcome=out_of_scope` si la question sort du périmètre métier déclaré.
+        Consomme du quota IA et crée un `ai_run` marqué `source=playground`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string, maxLength: 2000 }
+                locale: { type: string }
+      responses:
+        "200":
+          description: Réponse simulée
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reply: { type: string }
+                  outcome:
+                    type: string
+                    enum: [replied, handoff, refused, out_of_scope]
+                  guardrails:
+                    type: array
+                    items: { type: string }
+                  tokens: { type: object, additionalProperties: { type: integer } }
+                  latency_ms: { type: integer }
+
+  # --------------------------------------------------------------- ANALYTICS
+  /organizations/{organizationId}/analytics/overview:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Analytics]
+      summary: Indicateurs clés de l'espace
+      parameters:
+        - $ref: "#/components/parameters/DateRange"
+      responses:
+        "200":
+          description: KPI agrégés (uniquement des données réelles, jamais d'estimation présentée comme mesure)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AnalyticsOverview" }
+
+  /organizations/{organizationId}/analytics/conversations:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Analytics]
+      summary: Série temporelle des conversations
+      parameters:
+        - $ref: "#/components/parameters/DateRange"
+        - name: granularity
+          in: query
+          schema: { type: string, enum: [day, week, month], default: day }
+      responses:
+        "200":
+          description: Séries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string, format: date }
+                        inbound: { type: integer }
+                        outbound: { type: integer }
+                        ai_replies: { type: integer }
+                        handoffs: { type: integer }
+
+  /organizations/{organizationId}/analytics/agents:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Analytics]
+      summary: Performance par agent
+      parameters:
+        - $ref: "#/components/parameters/DateRange"
+      responses:
+        "200":
+          description: Statistiques par agent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        user_id: { type: string, format: uuid }
+                        full_name: { type: string }
+                        conversations_handled: { type: integer }
+                        messages_sent: { type: integer }
+                        avg_first_response_seconds: { type: integer }
+                        resolved: { type: integer }
+
+  # ----------------------------------------------------------------- BILLING
+  /billing/plans:
+    get:
+      tags: [Billing]
+      summary: Offres et prix pour la région détectée
+      description: |
+        Le prix dépend du `price_book` applicable (devise, région, pays). Le client voit toujours
+        le prix réel de sa région, jamais un prix codé en dur dans le frontend.
+      parameters:
+        - name: country_code
+          in: query
+          schema: { type: string, pattern: "^[A-Z]{2}$" }
+        - name: currency
+          in: query
+          schema: { type: string, pattern: "^[A-Z]{3}$" }
+      responses:
+        "200":
+          description: Offres
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  currency: { type: string }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Plan" }
+
+  /organizations/{organizationId}/billing/subscription:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Billing]
+      summary: Abonnement en cours
+      responses:
+        "200":
+          description: Abonnement et consommation
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Subscription" }
+    post:
+      tags: [Billing]
+      summary: Souscrire à une offre
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan_code, interval]
+              properties:
+                plan_code: { type: string }
+                interval: { type: string, enum: [month, year] }
+                coupon_code: { type: string }
+                provider: { type: string, enum: [manual, paddle, stripe, cinetpay, flutterwave] }
+      responses:
+        "201":
+          description: Abonnement créé ; `checkout_url` si un PSP est utilisé
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subscription: { $ref: "#/components/schemas/Subscription" }
+                  checkout_url: { type: string, format: uri, nullable: true }
+    patch:
+      tags: [Billing]
+      summary: Changer d'offre ou annuler
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plan_code: { type: string }
+                interval: { type: string, enum: [month, year] }
+                cancel_at_period_end: { type: boolean }
+      responses:
+        "200":
+          description: Abonnement modifié
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Subscription" }
+        "402": { $ref: "#/components/responses/PaymentRequired" }
+
+  /organizations/{organizationId}/billing/usage:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Billing]
+      summary: Consommation et quotas de la période
+      responses:
+        "200":
+          description: Compteurs par métrique
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period_start: { type: string, format: date-time }
+                  period_end: { type: string, format: date-time }
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/UsageCounter" }
+
+  /organizations/{organizationId}/billing/invoices:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Billing]
+      summary: Historique des factures
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Factures
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Invoice" }
+                  next_cursor: { type: string, nullable: true }
+
+  /organizations/{organizationId}/billing/invoices/{invoiceId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+      - name: invoiceId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Billing]
+      summary: Détail d'une facture
+      responses:
+        "200":
+          description: Facture avec lignes
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Invoice" }
+
+  /billing/coupons/validate:
+    post:
+      tags: [Billing]
+      summary: Valider un code promotionnel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, plan_code]
+              properties:
+                code: { type: string }
+                plan_code: { type: string }
+      responses:
+        "200":
+          description: Code valide pour cet espace
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid: { type: boolean }
+                  kind: { type: string, enum: [percent, amount] }
+                  value: { type: number }
+                  amount_after_minor: { type: integer }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ----------------------------------------------------------- NOTIFICATIONS
+  /organizations/{organizationId}/notifications:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    get:
+      tags: [Notifications]
+      summary: Mes notifications
+      parameters:
+        - name: unread_only
+          in: query
+          schema: { type: boolean, default: false }
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Notification" }
+    post:
+      tags: [Notifications]
+      summary: Marquer des notifications comme lues
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ids:
+                  type: array
+                  items: { type: string, format: uuid }
+                all: { type: boolean }
+      responses:
+        "204": { description: Notifications marquées comme lues }
+
+  # ------------------------------------------------------------------- ADMIN
+  /admin/stats:
+    get:
+      tags: [Admin]
+      summary: Statistiques globales de la plateforme
+      description: Réservé au personnel plateforme (`admin`/`owner`).
+      responses:
+        "200":
+          description: Agrégats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  organizations: { type: integer }
+                  active_subscriptions: { type: integer }
+                  trialing: { type: integer }
+                  mrr_by_currency:
+                    type: object
+                    additionalProperties: { type: integer, format: int64 }
+                  messages_30d: { type: integer }
+                  ai_replies_30d: { type: integer }
+                  ai_cost_30d_minor: { type: integer, format: int64 }
+                  whatsapp_accounts: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/organizations:
+    get:
+      tags: [Admin]
+      summary: Lister les organisations
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, suspended, deletion_requested, deleted] }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Organisations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/AdminOrganization" }
+                  next_cursor: { type: string, nullable: true }
+
+  /admin/organizations/{organizationId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationId"
+    patch:
+      tags: [Admin]
+      summary: Suspendre, réactiver ou ajuster un compte
+      description: Action journalisée ; une suspension exige un motif.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action, reason]
+              properties:
+                action: { type: string, enum: [suspend, reactivate, set_plan, set_trial] }
+                reason: { type: string, minLength: 20 }
+                plan_code: { type: string }
+                trial_ends_at: { type: string, format: date-time }
+      responses:
+        "200":
+          description: Compte mis à jour
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminOrganization" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: Rechercher un utilisateur
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Utilisateurs (données minimisées)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, format: uuid }
+                        email: { type: string, format: email }
+                        full_name: { type: string }
+                        organizations:
+                          type: array
+                          items: { type: string, format: uuid }
+                        created_at: { type: string, format: date-time }
+
+  /admin/plans/{planCode}/limits:
+    parameters:
+      - name: planCode
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      tags: [Admin]
+      summary: Configurer les quotas d'une offre
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [limits]
+              properties:
+                limits:
+                  type: array
+                  items:
+                    type: object
+                    required: [metric, limit_value, period, overage_policy]
+                    properties:
+                      metric: { type: string }
+                      limit_value: { type: number }
+                      period: { type: string, enum: [day, month, total] }
+                      overage_policy: { type: string, enum: [block, warn, bill] }
+      responses:
+        "200":
+          description: Quotas mis à jour (effet à la période suivante)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Plan" }
+
+  /admin/price-books:
+    get:
+      tags: [Admin]
+      summary: Lister les grilles tarifaires
+      responses:
+        "200":
+          description: Grilles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/PriceBook" }
+    post:
+      tags: [Admin]
+      summary: Créer ou modifier un prix
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [price_book_code, plan_code, interval, amount_minor]
+              properties:
+                price_book_code: { type: string }
+                plan_code: { type: string }
+                interval: { type: string, enum: [month, year] }
+                amount_minor: { type: integer, format: int64 }
+      responses:
+        "201":
+          description: Prix enregistré (nouvelle version)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceBook" }
+
+  /admin/ai-providers:
+    get:
+      tags: [Admin]
+      summary: Lister les fournisseurs et modèles IA
+      responses:
+        "200":
+          description: Fournisseurs (sans secret)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/AiProvider" }
+    patch:
+      tags: [Admin]
+      summary: Activer/désactiver un fournisseur ou changer le modèle par défaut
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider_code: { type: string }
+                is_enabled: { type: boolean }
+                default_model_code: { type: string }
+      responses:
+        "200":
+          description: Configuration mise à jour
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AiProvider" }
+
+  /admin/audit-logs:
+    get:
+      tags: [Admin]
+      summary: Journaux d'audit
+      parameters:
+        - name: organization_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: actor_user_id
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: "#/components/parameters/DateRange"
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Entrées d'audit (immuables)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/AuditLog" }
+                  next_cursor: { type: string, nullable: true }
+
+  /admin/data-access-grants:
+    get:
+      tags: [Admin]
+      summary: Lister les accès exceptionnels
+      responses:
+        "200":
+          description: Demandes et autorisations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/DataAccessGrant" }
+    post:
+      tags: [Admin]
+      summary: Demander un accès exceptionnel aux données d'un client
+      description: |
+        Exige un motif (≥ 20 caractères), une durée (≤ 7 jours) et l'approbation d'un **autre**
+        membre du personnel plateforme. Le client est notifié. Toute lecture effectuée sous cet
+        accès est journalisée avec le `grant_id`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [organization_id, scope, reason, expires_at]
+              properties:
+                organization_id: { type: string, format: uuid }
+                scope: { type: string, enum: [conversations_read, account_read, full_read] }
+                reason: { type: string, minLength: 20 }
+                expires_at: { type: string, format: date-time }
+      responses:
+        "201":
+          description: Demande créée (en attente d'approbation)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DataAccessGrant" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/data-access-grants/{grantId}/approve:
+    post:
+      tags: [Admin]
+      summary: Approuver un accès exceptionnel (par un autre administrateur)
+      parameters:
+        - name: grantId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Accès approuvé et journalisé
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DataAccessGrant" }
+        "403": { description: Auto-approbation interdite }
+
+  /admin/support/tickets:
+    get:
+      tags: [Admin]
+      summary: File de support
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [open, pending, resolved, closed] }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200":
+          description: Tickets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/SupportTicket" }
+                  next_cursor: { type: string, nullable: true }
+
+  # ------------------------------------------------------------------ SYSTEM
+  /health:
+    get:
+      tags: [System]
+      summary: Vérification de santé (sans authentification)
+      security: []
+      responses:
+        "200":
+          description: État des dépendances (base, files, Meta, IA)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok, degraded, down] }
+                  version: { type: string }
+                  checks:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        status: { type: string, enum: [ok, degraded, down] }
+                        latency_ms: { type: integer }
+
+  /meta:
+    get:
+      tags: [System]
+      summary: Métadonnées publiques (marque, langues, devises)
+      description: Utilisé par le frontend pour appliquer l'identité configurable sans redéploiement.
+      security: []
+      responses:
+        "200":
+          description: Configuration publique (aucun secret)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  brand:
+                    type: object
+                    properties:
+                      name: { type: string }
+                      logo_url: { type: string }
+                      primary_color: { type: string }
+                  locales:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code: { type: string }
+                        name: { type: string }
+                        direction: { type: string, enum: [ltr, rtl] }
+                  countries:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        code: { type: string }
+                        dial_code: { type: string }
+                        currency: { type: string }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    OrganizationId:
+      name: organizationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ContactId:
+      name: contactId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CampaignId:
+      name: campaignId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AutomationId:
+      name: automationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AssistantId:
+      name: assistantId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema: { type: string, maxLength: 128 }
+    DateRange:
+      name: from
+      in: query
+      description: "Début de période (ISO 8601). `to` est également accepté."
+      schema: { type: string, format: date }
+
+  responses:
+    BadRequest:
+      description: Requête invalide
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Authentification requise ou invalide
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Permission insuffisante ou ressource d'un autre espace
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: "Ressource introuvable (ou hors périmètre de l'espace : jamais de 403 révélateur)"
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: Conflit (doublon, version, transition d'état)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: Échec de validation (détail par champ)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    PaymentRequired:
+      description: Quota ou fonctionnalité non incluse dans l'offre
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    TooManyRequests:
+      description: Limitation de débit atteinte
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+              description: Code stable et documenté (ex. `window_closed`, `quota_exceeded`, `mfa_required`)
+            message:
+              type: string
+              description: Message destiné à l'utilisateur (traduit côté client via la clé)
+            details:
+              type: object
+              additionalProperties: true
+            request_id: { type: string }
+
+    AuthSession:
+      type: object
+      required: [access_token, refresh_token, expires_at, user]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expires_at: { type: string, format: date-time }
+        user: { $ref: "#/components/schemas/Me" }
+
+    MfaRequired:
+      type: object
+      required: [mfa_required]
+      properties:
+        mfa_required: { type: boolean, const: true }
+        challenge_token: { type: string }
+
+    SessionInfo:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        ip_hint: { type: string, description: IP tronquée, jamais l'IP complète }
+        user_agent: { type: string }
+        last_active_at: { type: string, format: date-time }
+        current: { type: boolean }
+
+    Me:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        full_name: { type: string }
+        avatar_url: { type: string, nullable: true }
+        locale: { type: string }
+        timezone: { type: string }
+        mfa_enabled: { type: boolean }
+        memberships:
+          type: array
+          items:
+            type: object
+            properties:
+              organization_id: { type: string, format: uuid }
+              organization_name: { type: string }
+              role: { $ref: "#/components/schemas/MemberRole" }
+              status: { type: string, enum: [invited, active, suspended, removed] }
+        is_platform_staff: { type: boolean }
+
+    MemberRole:
+      type: string
+      enum: [owner, admin, manager, agent, viewer]
+
+    Organization:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        logo_url: { type: string, nullable: true }
+        country_code: { type: string }
+        timezone: { type: string }
+        locale: { type: string }
+        currency: { type: string }
+        status: { type: string, enum: [active, suspended, deletion_requested, deleted] }
+        plan_code: { type: string }
+        trial_ends_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        my_role: { $ref: "#/components/schemas/MemberRole" }
+
+    Member:
+      type: object
+      properties:
+        user_id: { type: string, format: uuid }
+        full_name: { type: string }
+        email: { type: string, format: email }
+        role: { $ref: "#/components/schemas/MemberRole" }
+        status: { type: string, enum: [invited, active, suspended, removed] }
+        joined_at: { type: string, format: date-time, nullable: true }
+
+    Invitation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        role: { $ref: "#/components/schemas/MemberRole" }
+        expires_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        accepted_at: { type: string, format: date-time, nullable: true }
+
+    WhatsAppAccount:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        waba_id: { type: string }
+        display_name: { type: string }
+        status: { type: string, enum: [pending, connected, restricted, revoked, error] }
+        quality_rating: { type: string, enum: [green, yellow, red], nullable: true }
+        messaging_limit_tier: { type: string, nullable: true }
+        token_expires_at: { type: string, format: date-time, nullable: true }
+        last_synced_at: { type: string, format: date-time, nullable: true }
+        phone_numbers:
+          type: array
+          items:
+            type: object
+            properties:
+              phone_number_id: { type: string }
+              display_phone_number: { type: string }
+              verified_name: { type: string }
+              status: { type: string }
+              quality_rating: { type: string, nullable: true }
+
+    JobAccepted:
+      type: object
+      properties:
+        job_id: { type: string, format: uuid }
+        status: { type: string, enum: [queued, running] }
+
+    TemplateCategory:
+      type: string
+      enum: [marketing, utility, authentication]
+
+    TemplateStatus:
+      type: string
+      enum: [draft, pending, approved, rejected, paused, disabled]
+
+    Template:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        language: { type: string }
+        category: { $ref: "#/components/schemas/TemplateCategory" }
+        status: { $ref: "#/components/schemas/TemplateStatus" }
+        components:
+          type: array
+          items: { type: object, additionalProperties: true }
+        rejection_reason: { type: string, nullable: true }
+        submitted_at: { type: string, format: date-time, nullable: true }
+
+    ConversationStatus:
+      type: string
+      enum: [open, pending, closed]
+
+    ConversationPriority:
+      type: string
+      enum: [low, normal, high, urgent]
+
+    Conversation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        contact:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            display_name: { type: string, nullable: true }
+            phone_e164: { type: string }
+        phone_number_id: { type: string }
+        status: { $ref: "#/components/schemas/ConversationStatus" }
+        priority: { $ref: "#/components/schemas/ConversationPriority" }
+        assigned_user_id: { type: string, format: uuid, nullable: true }
+        ai_enabled: { type: boolean }
+        unread_count: { type: integer }
+        window_open: { type: boolean, description: "Fenêtre de 24 h ouverte (calculée)" }
+        last_message_at: { type: string, format: date-time, nullable: true }
+        last_inbound_at: { type: string, format: date-time, nullable: true }
+        tags:
+          type: array
+          items: { $ref: "#/components/schemas/Tag" }
+        version: { type: integer }
+
+    Message:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        conversation_id: { type: string, format: uuid }
+        direction: { type: string, enum: [inbound, outbound] }
+        sender_type: { type: string, enum: [contact, user, ai, system] }
+        sender_user_id: { type: string, format: uuid, nullable: true }
+        type: { type: string }
+        body: { type: string, nullable: true }
+        status: { type: string, enum: [queued, sent, delivered, read, failed, received] }
+        error_code: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    OutboundTextMessage:
+      type: object
+      required: [type, body]
+      properties:
+        type: { type: string, const: text }
+        body: { type: string, minLength: 1, maxLength: 4096 }
+      description: Refusé hors fenêtre de 24 h.
+
+    OutboundTemplateMessage:
+      type: object
+      required: [type, template_name, language]
+      properties:
+        type: { type: string, const: template }
+        template_name: { type: string }
+        language: { type: string }
+        parameters:
+          type: array
+          items: { type: string }
+
+    InternalNote:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        body: { type: string }
+        author_user_id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+
+    ConsentState:
+      type: string
+      enum: [unknown, granted, revoked]
+
+    ConsentPurpose:
+      type: string
+      enum: [marketing, service, transactional]
+
+    ConsentSource:
+      type: string
+      enum: [web_form, whatsapp_inbound, import, manual, api]
+
+    Consent:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        purpose: { $ref: "#/components/schemas/ConsentPurpose" }
+        status: { $ref: "#/components/schemas/ConsentState" }
+        source: { $ref: "#/components/schemas/ConsentSource" }
+        granted_at: { type: string, format: date-time, nullable: true }
+        revoked_at: { type: string, format: date-time, nullable: true }
+
+    ContactStatus:
+      type: string
+      enum: [active, blocked, unsubscribed, archived]
+
+    Contact:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        display_name: { type: string, nullable: true }
+        phone_e164: { type: string }
+        email: { type: string, nullable: true }
+        locale: { type: string, nullable: true }
+        status: { $ref: "#/components/schemas/ContactStatus" }
+        consent_state: { $ref: "#/components/schemas/ConsentState" }
+        tags:
+          type: array
+          items: { $ref: "#/components/schemas/Tag" }
+        last_interaction_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    ContactDetail:
+      allOf:
+        - $ref: "#/components/schemas/Contact"
+        - type: object
+          properties:
+            consents:
+              type: array
+              items: { $ref: "#/components/schemas/Consent" }
+            custom_fields:
+              type: object
+              additionalProperties: true
+            conversations_count: { type: integer }
+
+    Tag:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        color: { type: string }
+
+    Segment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string, enum: [static, dynamic] }
+        member_count: { type: integer }
+        computed_at: { type: string, format: date-time, nullable: true }
+
+    SegmentDefinition:
+      type: object
+      description: |
+        DSL restreint et validé par Zod. **Aucune expression SQL libre.**
+        Exemple : `{"all":[{"field":"tag","op":"in","value":["vip"]},{"field":"consent","op":"eq","value":"granted"}]}`
+      properties:
+        all:
+          type: array
+          items:
+            type: object
+            required: [field, op]
+            properties:
+              field: { type: string, enum: [tag, consent, status, country, locale, created_at, last_interaction_at, custom_field, message_count] }
+              op: { type: string, enum: [eq, neq, in, not_in, gt, lt, between, exists] }
+              value: {}
+        any:
+          type: array
+          items: { type: object, additionalProperties: true }
+
+    OptOut:
+      type: object
+      properties:
+        phone_e164: { type: string }
+        reason: { type: string, nullable: true }
+        opted_out_at: { type: string, format: date-time }
+
+    Import:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        filename: { type: string }
+        status: { type: string, enum: [pending, validating, running, completed, failed, canceled] }
+        total_rows: { type: integer }
+        inserted: { type: integer }
+        updated: { type: integer }
+        skipped: { type: integer }
+        failed: { type: integer }
+        error_report_url: { type: string, nullable: true, description: URL signée expirante }
+        started_at: { type: string, format: date-time, nullable: true }
+        finished_at: { type: string, format: date-time, nullable: true }
+
+    CampaignInput:
+      type: object
+      required: [name, template_id, segment_id]
+      properties:
+        name: { type: string, maxLength: 120 }
+        template_id: { type: string, format: uuid }
+        segment_id: { type: string, format: uuid }
+        phone_number_id: { type: string }
+        variables:
+          type: object
+          additionalProperties: { type: string }
+        throttle_per_minute: { type: integer, minimum: 1, maximum: 600, default: 60 }
+
+    Campaign:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [draft, scheduled, running, paused, completed, canceled, failed] }
+        template_id: { type: string, format: uuid }
+        segment_id: { type: string, format: uuid }
+        scheduled_at: { type: string, format: date-time, nullable: true }
+        timezone: { type: string }
+        total_recipients: { type: integer }
+        sent_count: { type: integer }
+        delivered_count: { type: integer }
+        read_count: { type: integer }
+        failed_count: { type: integer }
+        replied_count: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    CampaignRecipient:
+      type: object
+      properties:
+        contact_id: { type: string, format: uuid }
+        phone_e164: { type: string }
+        status:
+          type: string
+          enum: [pending, queued, sent, delivered, read, replied, failed, skipped_no_consent, skipped_opt_out, skipped_no_template]
+        error_code: { type: string, nullable: true }
+        sent_at: { type: string, format: date-time, nullable: true }
+
+    AutomationTrigger:
+      type: string
+      enum: [message_received, keyword_match, no_reply, contact_created, tag_added, campaign_replied, schedule]
+
+    AutomationDefinition:
+      type: object
+      required: [nodes, edges]
+      properties:
+        nodes:
+          type: array
+          items:
+            type: object
+            required: [id, type]
+            properties:
+              id: { type: string }
+              type: { type: string, enum: [trigger, condition, action_ai_reply, action_send_message, action_assign, action_tag, action_handoff, delay, stop] }
+              config: { type: object, additionalProperties: true }
+        edges:
+          type: array
+          items:
+            type: object
+            required: [from, to]
+            properties:
+              from: { type: string }
+              to: { type: string }
+              when: { type: string, enum: [always, true, false] }
+
+    Automation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [draft, active, paused, archived] }
+        trigger_type: { $ref: "#/components/schemas/AutomationTrigger" }
+        definition: { $ref: "#/components/schemas/AutomationDefinition" }
+        version: { type: integer }
+        updated_at: { type: string, format: date-time }
+
+    AutomationRun:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        automation_id: { type: string, format: uuid }
+        conversation_id: { type: string, format: uuid, nullable: true }
+        status: { type: string, enum: [queued, running, done, failed, canceled] }
+        started_at: { type: string, format: date-time, nullable: true }
+        finished_at: { type: string, format: date-time, nullable: true }
+        error: { type: string, nullable: true }
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              node_id: { type: string }
+              action_type: { type: string }
+              status: { type: string }
+              scheduled_for: { type: string, format: date-time, nullable: true }
+              executed_at: { type: string, format: date-time, nullable: true }
+
+    AssistantInput:
+      type: object
+      required: [name, primary_locale]
+      properties:
+        name: { type: string, maxLength: 60 }
+        avatar_url: { type: string, format: uri }
+        persona: { type: string, maxLength: 2000 }
+        tone: { type: string, enum: [professional, friendly, formal, casual, enthusiastic] }
+        primary_locale: { type: string }
+        secondary_locales:
+          type: array
+          items: { type: string }
+        instructions: { type: string, maxLength: 8000 }
+        objectives:
+          type: array
+          items: { type: string, maxLength: 200 }
+        business_info: { type: object, additionalProperties: true }
+        hours: { type: object, additionalProperties: true }
+        fallback_message: { type: string, maxLength: 500 }
+        handoff_keywords:
+          type: array
+          items: { type: string }
+        model_code: { type: string }
+        is_active: { type: boolean }
+
+    Assistant:
+      allOf:
+        - $ref: "#/components/schemas/AssistantInput"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            version: { type: integer }
+            knowledge_documents_count: { type: integer }
+            created_at: { type: string, format: date-time }
+            updated_at: { type: string, format: date-time }
+
+    KnowledgeDocument:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        source_type: { type: string, enum: [upload, url, manual, faq] }
+        status: { type: string, enum: [pending, indexing, ready, failed] }
+        chunk_count: { type: integer }
+        size_bytes: { type: integer, nullable: true }
+        error: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    AnalyticsOverview:
+      type: object
+      properties:
+        period: { type: object, additionalProperties: { type: string } }
+        conversations:
+          type: object
+          properties:
+            total: { type: integer }
+            open: { type: integer }
+            closed: { type: integer }
+            avg_first_response_seconds: { type: integer, nullable: true }
+        messages:
+          type: object
+          properties:
+            inbound: { type: integer }
+            outbound: { type: integer }
+            ai_replies: { type: integer }
+            handoffs: { type: integer }
+        campaigns:
+          type: object
+          properties:
+            sent: { type: integer }
+            delivered: { type: integer }
+            read: { type: integer }
+            failed: { type: integer }
+        ai:
+          type: object
+          properties:
+            replies: { type: integer }
+            avg_latency_ms: { type: integer }
+            estimated_cost_minor: { type: integer, format: int64 }
+            currency: { type: string }
+            guardrail_blocks: { type: integer }
+
+    Plan:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        description: { type: string }
+        trial_days: { type: integer }
+        features:
+          type: array
+          items: { type: string }
+        limits:
+          type: array
+          items:
+            type: object
+            properties:
+              metric: { type: string }
+              limit_value: { type: number }
+              period: { type: string }
+        prices:
+          type: array
+          items:
+            type: object
+            properties:
+              interval: { type: string, enum: [month, year] }
+              amount_minor: { type: integer, format: int64 }
+              currency: { type: string }
+
+    PriceBook:
+      type: object
+      properties:
+        code: { type: string }
+        currency: { type: string }
+        region: { type: string }
+        country_code: { type: string, nullable: true }
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              plan_code: { type: string }
+              interval: { type: string }
+              amount_minor: { type: integer, format: int64 }
+
+    Subscription:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        plan_code: { type: string }
+        status: { type: string, enum: [trialing, active, past_due, canceled, expired, manual] }
+        provider: { type: string, enum: [manual, paddle, stripe, cinetpay, flutterwave] }
+        current_period_start: { type: string, format: date-time }
+        current_period_end: { type: string, format: date-time }
+        cancel_at_period_end: { type: boolean }
+        trial_ends_at: { type: string, format: date-time, nullable: true }
+        amount_minor: { type: integer, format: int64 }
+        currency: { type: string }
+        usage:
+          type: array
+          items: { $ref: "#/components/schemas/UsageCounter" }
+
+    UsageCounter:
+      type: object
+      properties:
+        metric: { type: string }
+        used: { type: number }
+        limit_value: { type: number, nullable: true }
+        period: { type: string }
+        overage_policy: { type: string, enum: [block, warn, bill] }
+
+    Invoice:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: string }
+        status: { type: string, enum: [draft, open, paid, void, uncollectible] }
+        currency: { type: string }
+        subtotal_minor: { type: integer, format: int64 }
+        tax_minor: { type: integer, format: int64 }
+        total_minor: { type: integer, format: int64 }
+        issued_at: { type: string, format: date-time }
+        due_at: { type: string, format: date-time, nullable: true }
+        paid_at: { type: string, format: date-time, nullable: true }
+        pdf_url: { type: string, nullable: true }
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              description: { type: string }
+              quantity: { type: number }
+              unit_amount_minor: { type: integer, format: int64 }
+              amount_minor: { type: integer, format: int64 }
+
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string }
+        title: { type: string }
+        body: { type: string }
+        data: { type: object, additionalProperties: true }
+        read_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    AdminOrganization:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        country_code: { type: string }
+        status: { type: string }
+        plan_code: { type: string }
+        subscription_status: { type: string, nullable: true }
+        members_count: { type: integer }
+        messages_30d: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    AiProvider:
+      type: object
+      properties:
+        code: { type: string }
+        name: { type: string }
+        is_enabled: { type: boolean }
+        secret_configured: { type: boolean, description: "Indique si un secret existe ; le secret lui-même n'est jamais exposé" }
+        models:
+          type: array
+          items:
+            type: object
+            properties:
+              code: { type: string }
+              display_name: { type: string }
+              is_default: { type: boolean }
+              is_enabled: { type: boolean }
+              input_price_per_mtok_minor: { type: integer, format: int64 }
+              output_price_per_mtok_minor: { type: integer, format: int64 }
+
+    AuditLog:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        organization_id: { type: string, format: uuid, nullable: true }
+        actor_type: { type: string, enum: [user, platform_staff, system, webhook] }
+        actor_user_id: { type: string, format: uuid, nullable: true }
+        action: { type: string }
+        entity_type: { type: string, nullable: true }
+        entity_id: { type: string, format: uuid, nullable: true }
+        request_id: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    DataAccessGrant:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        staff_user_id: { type: string, format: uuid }
+        scope: { type: string, enum: [conversations_read, account_read, full_read] }
+        reason: { type: string }
+        approved_by: { type: string, format: uuid, nullable: true }
+        starts_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        revoked_at: { type: string, format: date-time, nullable: true }
+        organization_notified_at: { type: string, format: date-time, nullable: true }
+
+    SupportTicket:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organization_id: { type: string, format: uuid }
+        subject: { type: string }
+        status: { type: string, enum: [open, pending, resolved, closed] }
+        priority: { type: string, enum: [low, normal, high, urgent] }
+        assigned_staff_id: { type: string, format: uuid, nullable: true }
+        created_at: { type: string, format: date-time }

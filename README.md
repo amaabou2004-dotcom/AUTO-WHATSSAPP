@@ -1,8 +1,9 @@
 # WhatsAuto AI — Monorepo du SaaS d'automatisation WhatsApp par IA
 
-> **État du projet : PHASE 1 terminée — en attente de validation.**
+> **État du projet : PHASE 1 terminée et validée · PHASE 2 livrée — en attente de validation.**
 > **Aucun code applicatif n'existe encore.** Ce dépôt contient pour l'instant l'audit, l'étude de faisabilité, l'architecture cible, le budget, le modèle économique, le registre des risques, la roadmap et les décisions à valider.
 > Ce README ne revendique **aucune** fonctionnalité en ligne, aucun client, aucun chiffre d'usage, aucune certification.
+> Les documents de Phase 2 (schéma de données, contrat OpenAPI, ADR) sont des **spécifications**, pas du code exécutable.
 
 ---
 
@@ -11,7 +12,7 @@
 | Phase | Objet | État |
 |---|---|---|
 | **1** | Audit, faisabilité, architecture, budget, modèle économique, risques, roadmap | ✅ **livrée — à valider** |
-| 2 | Architecture technique définitive (schéma de données complet + OpenAPI + ADR) | ⏸ en attente de votre validation |
+| **2** | Architecture technique définitive : schéma de données (55 tables), contrat OpenAPI (81 chemins / 114 opérations, **validé**), 14 ADR | ✅ **livrée — à valider** |
 | 3 → 16 | Monorepo, frontend, auth, base de données, API, WhatsApp, IA, conversations, campagnes, facturation, back-office, i18n, tests, déploiement | ⏳ non démarrées |
 
 **La règle appliquée :** aucune phase ne démarre sans validation explicite (exigence du cahier des charges).
@@ -29,7 +30,11 @@
 | [`docs/04-risques.md`](docs/04-risques.md) | 28 risques qualifiés (probabilité × impact), mitigations, priorités |
 | [`docs/05-roadmap.md`](docs/05-roadmap.md) | Séquencement des 16 phases, livrables, critères de sortie, estimations en jours-homme, périmètre du MVP |
 | [`docs/06-decisions-a-valider.md`](docs/06-decisions-a-valider.md) | **14 décisions** à trancher avant la suite (4 bloquantes) |
+| [`docs/07-modele-donnees.md`](docs/07-modele-donnees.md) | Modèle de données définitif : 55 tables, colonnes, contraintes, index, politiques RLS, invariants, dimensionnement |
+| [`docs/08-api-openapi.yaml`](docs/08-api-openapi.yaml) | Contrat OpenAPI 3.1 de l'API (source de vérité des types et des tests) |
+| [`docs/09-adr.md`](docs/09-adr.md) | 14 décisions d'architecture (ADR) avec alternatives écartées |
 | [`scripts/audit-windows.ps1`](scripts/audit-windows.ps1) | Audit en **lecture seule** de votre machine Windows |
+| [`scripts/validate-openapi.sh`](scripts/validate-openapi.sh) | Validation du contrat OpenAPI (intégrée à la CI en Phase 3) |
 
 ---
 
@@ -66,9 +71,23 @@
 
 ---
 
-## 6. Prochaine étape
+## 6. Décisions validées le 31 octobre 2026
 
-Lire [`docs/06-decisions-a-valider.md`](docs/06-decisions-a-valider.md), répondre aux décisions **D1 à D4** (bloquantes) et dire si la Phase 2 peut démarrer.
+| Réf. | Décision |
+|---|---|
+| **D1** | **Le client paie Meta directement** (marge SaaS ~94 %, aucun risque pays) |
+| **D3** | **Facturation manuelle, puis Paddle (international) + CinetPay (zone XOF)** |
+| **D4** | **Afrique de l'Ouest francophone en priorité** (FR par défaut, prix en XOF, `Africa/Niamey`) |
+
+## 7. Prochaine étape
+
+1. Relire [`docs/07-modele-donnees.md`](docs/07-modele-donnees.md) et [`docs/09-adr.md`](docs/09-adr.md) (points à confirmer : ADR-011 Kysely, durées de conservation, verticales interdites).
+2. Valider la Phase 2 pour lancer la **Phase 3** (monorepo pnpm + turbo, TypeScript strict, CI GitHub Actions, tests de migrations sous PGlite).
+
+**Vérification du contrat d'API :**
+```bash
+./scripts/validate-openapi.sh
+```
 
 ---
 

@@ -3,10 +3,20 @@
 > Chaque décision suit le format ADR allégé : **Contexte → Options → Recommandation → Conséquence si on se trompe**.
 > Répondez par `D1=A`, `D2=B`… ou en texte libre. Tant qu'une décision n'est pas tranchée, la phase correspondante ne démarre pas.
 > 🔴 = décision **bloquante** avant la phase indiquée.
+>
+> ## ✅ Décisions validées le 31 octobre 2026
+> | Réf. | Décision retenue | Conséquence appliquée |
+> |---|---|---|
+> | **D1** | **A — le client paie Meta directement** | ADR-006, `wa_rate_cards` + simulateur de coût, aucune refacturation de messages |
+> | **D3** | **A — facturation manuelle puis Paddle + CinetPay** | ADR-009, interface `BillingProvider`, prix en base |
+> | **D4** | **A — Afrique de l'Ouest francophone en priorité** | FR par défaut, `price_book` XOF, `Africa/Niamey` par défaut, `region='africa_west'` |
+> | — | **Phase 2 démarrée** | `07-modele-donnees.md`, `08-api-openapi.yaml`, `09-adr.md` |
+>
+> Restent à trancher : **D2** (recommandation A retenue par défaut, à confirmer), D5 à D14.
 
 ---
 
-## D1 🔴 — Qui paie les frais de messages WhatsApp ?
+## D1 ✅ — Qui paie les frais de messages WhatsApp ? *(validée : A)*
 
 **Contexte :** depuis le 1er octobre 2026, les messages de service (les réponses de l'IA) sont facturés. 3 000 réponses/mois = 12 USD (Afrique de l'Ouest) ou 165 USD (Allemagne).
 **Options :**
@@ -26,7 +36,7 @@
 
 ---
 
-## D3 🔴 — Prestataire de paiement au lancement
+## D3 ✅ — Prestataire de paiement au lancement *(validée : A)*
 
 **Contexte :** Stripe ne couvre pas le Niger ; Paystack non plus. Paddle/Lemon Squeezy (Merchant of Record) traitent la TVA mais exigent un KYC.
 **Options :**
@@ -38,7 +48,7 @@
 
 ---
 
-## D4 🔴 — Marché de lancement
+## D4 ✅ — Marché de lancement *(validée : A)*
 
 **Options :** **A.** Afrique de l'Ouest francophone (Niger, Sénégal, Côte d'Ivoire, Mali, Burkina, Bénin, Togo) — B. Europe francophone (France, Belgique, Suisse) — C. MENA francophone/arabophone — D. Les trois, avec la même grille.
 **Recommandation : A** (WhatsApp y est le canal principal, concurrence moins mature, votre réseau local), avec B en second via la diaspora. **Conséquence :** détermine les langues prioritaires (FR + EN), la devise de la landing page et le discours commercial.

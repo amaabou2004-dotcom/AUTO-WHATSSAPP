@@ -39,7 +39,9 @@ Semaine 32-33  : Phase 16 — production, documentation commerciale, légal
 **Livrables :** `00` audit, `01` faisabilité Meta/IA, `03` budget & modèle économique, `04` risques, `05` roadmap, `06` décisions, script d'audit Windows.
 **Critère de sortie :** vous avez validé les décisions `06-decisions-a-valider.md`.
 
-### PHASE 2 — Architecture technique définitive — 3 jh
+### PHASE 2 — Architecture technique définitive ✅ *(livrée — à valider)*
+**Livrée :** modèle de données complet (55 tables, contraintes, index, politiques RLS, invariants) dans `07` ;
+contrat OpenAPI **validé** (81 chemins, 114 opérations, 55 schémas) dans `08` ; 14 ADR dans `09`.
 **Objectif :** figer l'architecture, le modèle de données et les contrats d'API.
 **Livrables :** `02-architecture-cible.md` consolidé, diagramme de données complet (tables + colonnes + index + politiques RLS), spécification OpenAPI des ~60 endpoints, ADR (Architecture Decision Records) pour les 8 décisions structurantes.
 **Critère de sortie :** aucune zone d'ombre sur le multi-tenant, les secrets, la facturation, la file de messages.
