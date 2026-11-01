@@ -1,0 +1,25 @@
+# Blueprint Render pour l'API, le webhook et le planificateur AutoWhatsApp.
+# Le service reste actif et le disque persistant conserve les données JSON.
+# Les secrets WhatsApp et FRONTEND_URL s'ajoutent dans Render après le déploiement.
+services:
+  - type: web
+    name: autowhatsapp-api
+    runtime: node
+    plan: 0.5c-512mb
+    autoDeployTrigger: commit
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATA_FILE
+        value: /var/data/autowhatsapp/store.json
+      - key: WHATSAPP_VERIFY_TOKEN
+        generateValue: true
+      - key: WHATSAPP_API_VERSION
+        value: v22.0
+    disk:
+      name: autowhatsapp-data
+      mountPath: /var/data/autowhatsapp
+      sizeGB: 1

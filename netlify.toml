@@ -1,0 +1,31 @@
+# Déploiement du frontend AutoWhatsApp sur Netlify.
+# Dans Netlify > Site configuration > Environment variables, définir :
+# VITE_API_URL = https://votre-backend-public.example/api
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# React Router : les fichiers existants restent servis directement,
+# toutes les autres routes sont confiées à l'application React.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Les fichiers générés par Vite ont un hash : ils peuvent être mis en cache.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
