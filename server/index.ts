@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { apiErrorHandler, createApiRouter } from './routes.js';
+import { createAuthRouter, createRequireAuth, getAuthConfig } from './auth.js';
 import { startScheduler } from './scheduler.js';
 import { JsonStore } from './store.js';
 
@@ -12,8 +13,10 @@ const isProduction = process.env.NODE_ENV === 'production';
 const port = Number(process.env.PORT || 3000);
 const app = express();
 const store = new JsonStore(process.env.DATA_FILE);
+const authConfig = getAuthConfig();
 
 app.disable('x-powered-by');
+app.set('trust proxy', 1);
 
 // En local, le frontend et l’API partagent la même origine. En production,
 // FRONTEND_URL autorise explicitement le domaine Netlify à appeler cette API.
@@ -50,6 +53,17 @@ app.use(express.json({
     (req as Request & { rawBody?: Buffer }).rawBody = buffer;
   },
 }));
+
+app.use('/api/auth', createAuthRouter(authConfig));
+const requireAuth = createRequireAuth(authConfig);
+app.use('/api', (req, res, next) => {
+  // Le health check et le webhook Meta ont leurs propres mécanismes de vérification.
+  if (req.path === '/health' || req.path.startsWith('/webhooks/whatsapp')) {
+    next();
+    return;
+  }
+  requireAuth(req, res, next);
+});
 app.use('/api', createApiRouter(store));
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Route API introuvable.' }));
 app.use('/api', apiErrorHandler);

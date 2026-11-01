@@ -1,6 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { RequireAuth } from './components/Auth';
 import Layout from './components/Layout';
 import Landing from './pages/Landing';
+import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Schedules from './pages/Schedules';
 import Chatbot from './pages/Chatbot';
@@ -12,7 +14,8 @@ export default function App() {
   return (
     <Routes>
       <Route index element={<Landing />} />
-      <Route path="app" element={<Layout />}>
+      <Route path="login" element={<Login />} />
+      <Route path="app" element={<RequireAuth><Layout /></RequireAuth>}>
         <Route index element={<Dashboard />} />
         <Route path="schedules" element={<Schedules />} />
         <Route path="chatbot" element={<Chatbot />} />

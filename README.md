@@ -5,6 +5,7 @@ Une application web en français pour **programmer des messages WhatsApp** et **
 ## Fonctionnalités
 
 - **Site vitrine** : page d’accueil responsive, présentation du produit, parcours et questions fréquentes.
+- **Accès sécurisé** : page de connexion, sessions signées et expiration automatique, protection de l’API et du tableau de bord.
 - **Tableau de bord** : indicateurs, activité des 7 derniers jours, prochains envois et événements récents.
 - **Messages programmés** : envoi unique, quotidien ou hebdomadaire, annulation et historique des statuts.
 - **Chatbot à règles** : correspondance « contient », « exacte » ou « commence par », activation/pause, modification et suppression.
@@ -25,7 +26,9 @@ npm run dev
 
 Ouvrez ensuite `http://localhost:3000` pour le site vitrine, ou `http://localhost:3000/app` pour le tableau de bord. Le serveur écoute sur `0.0.0.0`, ce qui permet aussi l’utilisation dans un environnement de prévisualisation.
 
-Aucune configuration n’est nécessaire pour le mode démo. Les envois sont simulés et enregistrés dans l’historique ; aucun message n’est transmis à WhatsApp.
+En développement, la page de connexion préremplit les identifiants de démonstration : `admin@demo.local` / `demo1234`. En production, `ADMIN_EMAIL`, `ADMIN_PASSWORD` (12 caractères minimum) et `AUTH_SECRET` (32 caractères minimum) sont obligatoires.
+
+Aucune configuration n’est nécessaire pour le mode démo WhatsApp. Les envois sont simulés et enregistrés dans l’historique ; aucun message n’est transmis à WhatsApp.
 
 ## Scripts
 
@@ -49,7 +52,9 @@ Le Blueprint Render configure le service Node, la vérification de santé `/api/
 2. Vérifiez le plan `0.5c-512mb`, le disque persistant et le tarif affiché avant de valider. Un service qui se met en veille ne convient pas au planificateur.
 3. Lancez le déploiement, puis relevez l’URL publique fournie par Render. L’endpoint `/api/health` doit répondre avec `status: ok`.
 
-Le service démarre en mode démo. Dans **Environment**, ajoutez ensuite les identifiants WhatsApp (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`) lorsque vous êtes prêt à activer les vrais envois. `WHATSAPP_VERIFY_TOKEN` est généré automatiquement par le Blueprint.
+Lors de la création du Blueprint, choisissez `ADMIN_EMAIL` et un `ADMIN_PASSWORD` d’au moins 12 caractères : ce seront vos identifiants de connexion au tableau de bord. `AUTH_SECRET` et `WHATSAPP_VERIFY_TOKEN` sont générés automatiquement. Pour un service déjà créé, ajoutez ces variables manuellement dans **Environment** avant de déployer cette version.
+
+Le service démarre en mode démo WhatsApp. Dans **Environment**, ajoutez ensuite les identifiants (`WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET`) lorsque vous êtes prêt à activer les vrais envois.
 
 ### 2. Déployer le frontend sur Netlify
 
@@ -113,6 +118,10 @@ Le token d’accès et le secret ne sont jamais envoyés au navigateur ni stock�
 
 | Variable | Rôle | Défaut |
 | --- | --- | --- |
+| `ADMIN_EMAIL` | Identifiant de connexion à l’espace | `admin@demo.local` en développement |
+| `ADMIN_PASSWORD` | Mot de passe administrateur, 12 caractères minimum en production | `demo1234` en développement |
+| `AUTH_SECRET` | Secret de signature des sessions, 32 caractères minimum en production | Valeur locale de démonstration |
+| `AUTH_SESSION_HOURS` | Durée d’une session | `12` |
 | `WHATSAPP_ACCESS_TOKEN` | Token Bearer de la Cloud API | Vide = démo |
 | `WHATSAPP_PHONE_NUMBER_ID` | Identifiant du numéro expéditeur | Vide = démo |
 | `WHATSAPP_BUSINESS_ACCOUNT_ID` | Identifiant du compte professionnel, affiché dans les réglages | Vide |
@@ -143,7 +152,7 @@ Le planificateur vérifie les échéances toutes les 15 secondes. Les écritures
 
 ## Remarques pour une mise en production
 
-Ce dépôt est un MVP mono-espace. Avant une exposition publique multi-utilisateur, ajoutez notamment une authentification, une base de données transactionnelle, une file de jobs persistante, la limitation de débit et la gestion des modèles WhatsApp approuvés.
+Ce dépôt est un MVP mono-espace avec authentification administrateur. Avant une ouverture multi-utilisateur, ajoutez notamment la gestion des rôles, une base de données transactionnelle, une file de jobs persistante, une limitation de débit globale et la gestion des modèles WhatsApp approuvés.
 
 La Cloud API peut exiger un **modèle approuvé** pour initier une conversation hors fenêtre de service de 24 heures. Respectez aussi le consentement des contacts et les politiques de WhatsApp Business.
 

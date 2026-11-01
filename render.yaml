@@ -15,6 +15,14 @@ services:
         value: "22"
       - key: DATA_FILE
         value: /var/data/autowhatsapp/store.json
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: AUTH_SESSION_HOURS
+        value: "12"
       - key: WHATSAPP_VERIFY_TOKEN
         generateValue: true
       - key: WHATSAPP_API_VERSION

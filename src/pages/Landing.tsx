@@ -48,7 +48,7 @@ export default function Landing() {
             <Link to="/app" className="landing-mobile-cta" onClick={closeMenu}>Ouvrir la démo <ArrowRight size={16} /></Link>
           </nav>
           <div className="landing-nav-actions">
-            <Link to="/app" className="landing-login">Ouvrir mon espace</Link>
+            <Link to="/login" className="landing-login">Ouvrir mon espace</Link>
             <Link to="/app" className="landing-button landing-button-small">Voir la démo <ArrowUpRight size={15} /></Link>
           </div>
           <button className="landing-menu-button" onClick={() => setMenuOpen((open) => !open)} aria-expanded={menuOpen} aria-label={menuOpen ? 'Fermer le menu' : 'Ouvrir le menu'}>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   BotMessageSquare,
   CalendarClock,
@@ -7,6 +7,7 @@ import {
   History,
   Globe2,
   LayoutDashboard,
+  LogOut,
   Menu,
   MessageSquareText,
   Settings,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import type { IntegrationSettings } from '../../shared/types';
 import { useApi } from '../hooks/useApi';
+import { useAuth } from './Auth';
 
 const navigation = [
   { to: '/app', label: 'Vue d’ensemble', icon: LayoutDashboard, end: true },
@@ -37,6 +39,8 @@ const pageTitles: Record<string, string> = {
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const { data: settings } = useApi<IntegrationSettings>('/settings');
 
   useEffect(() => {
@@ -87,7 +91,7 @@ export default function Layout() {
           <div className="sidebar-user">
             <span className="user-avatar">NS</span>
             <span><strong>Néma Studio</strong><small>Administrateur</small></span>
-            <span className="online-dot" title="En ligne" />
+            <button className="logout-button" onClick={() => { logout(); navigate('/login'); }} aria-label="Se déconnecter" title="Se déconnecter"><LogOut size={16} /></button>
           </div>
         </div>
       </aside>
