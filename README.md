@@ -4,6 +4,7 @@ Une application web en français pour **programmer des messages WhatsApp** et **
 
 ## Fonctionnalités
 
+- **Site vitrine** : page d’accueil responsive, présentation du produit, parcours et questions fréquentes.
 - **Tableau de bord** : indicateurs, activité des 7 derniers jours, prochains envois et événements récents.
 - **Messages programmés** : envoi unique, quotidien ou hebdomadaire, annulation et historique des statuts.
 - **Chatbot à règles** : correspondance « contient », « exacte » ou « commence par », activation/pause, modification et suppression.
@@ -22,7 +23,7 @@ npm install
 npm run dev
 ```
 
-Ouvrez ensuite `http://localhost:3000`. Le serveur écoute sur `0.0.0.0`, ce qui permet aussi l’utilisation dans un environnement de prévisualisation.
+Ouvrez ensuite `http://localhost:3000` pour le site vitrine, ou `http://localhost:3000/app` pour le tableau de bord. Le serveur écoute sur `0.0.0.0`, ce qui permet aussi l’utilisation dans un environnement de prévisualisation.
 
 Aucune configuration n’est nécessaire pour le mode démo. Les envois sont simulés et enregistrés dans l’historique ; aucun message n’est transmis à WhatsApp.
 

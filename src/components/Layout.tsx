@@ -5,6 +5,7 @@ import {
   CalendarClock,
   ChevronRight,
   History,
+  Globe2,
   LayoutDashboard,
   Menu,
   MessageSquareText,
@@ -17,20 +18,20 @@ import type { IntegrationSettings } from '../../shared/types';
 import { useApi } from '../hooks/useApi';
 
 const navigation = [
-  { to: '/', label: 'Vue d’ensemble', icon: LayoutDashboard, end: true },
-  { to: '/schedules', label: 'Messages programmés', icon: CalendarClock },
-  { to: '/chatbot', label: 'Chatbot', icon: BotMessageSquare },
-  { to: '/contacts', label: 'Contacts', icon: UsersRound },
-  { to: '/history', label: 'Historique', icon: History },
+  { to: '/app', label: 'Vue d’ensemble', icon: LayoutDashboard, end: true },
+  { to: '/app/schedules', label: 'Messages programmés', icon: CalendarClock },
+  { to: '/app/chatbot', label: 'Chatbot', icon: BotMessageSquare },
+  { to: '/app/contacts', label: 'Contacts', icon: UsersRound },
+  { to: '/app/history', label: 'Historique', icon: History },
 ];
 
 const pageTitles: Record<string, string> = {
-  '/': 'Vue d’ensemble',
-  '/schedules': 'Messages programmés',
-  '/chatbot': 'Chatbot',
-  '/contacts': 'Contacts',
-  '/history': 'Historique des messages',
-  '/settings': 'Paramètres',
+  '/app': 'Vue d’ensemble',
+  '/app/schedules': 'Messages programmés',
+  '/app/chatbot': 'Chatbot',
+  '/app/contacts': 'Contacts',
+  '/app/history': 'Historique des messages',
+  '/app/settings': 'Paramètres',
 };
 
 export default function Layout() {
@@ -40,6 +41,7 @@ export default function Layout() {
 
   useEffect(() => {
     setMobileOpen(false);
+    document.title = `${pageTitles[location.pathname] || 'Espace de travail'} · AutoWhatsApp`;
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [location.pathname]);
 
@@ -48,7 +50,7 @@ export default function Layout() {
       {mobileOpen && <button className="sidebar-overlay" aria-label="Fermer le menu" onClick={() => setMobileOpen(false)} />}
       <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`}>
         <div className="brand-row">
-          <Link to="/" className="brand" aria-label="AutoWhatsApp, accueil">
+          <Link to="/app" className="brand" aria-label="AutoWhatsApp, tableau de bord">
             <span className="brand-mark"><MessageSquareText size={23} strokeWidth={2.2} /><Zap className="brand-zap" size={12} fill="currentColor" /></span>
             <span>Auto<span>WhatsApp</span></span>
           </Link>
@@ -70,7 +72,7 @@ export default function Layout() {
             </NavLink>
           ))}
           <div className="nav-section-label nav-section-second">CONFIGURATION</div>
-          <NavLink to="/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+          <NavLink to="/app/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
             <Settings size={19} strokeWidth={1.9} />
             <span>Paramètres</span>
           </NavLink>
@@ -99,7 +101,8 @@ export default function Layout() {
             <strong>{pageTitles[location.pathname] || 'AutoWhatsApp'}</strong>
           </div>
           <div className="topbar-right">
-            <Link to="/settings" className={`connection-pill ${settings?.mode === 'live' ? 'live' : ''}`}>
+            <Link to="/" className="public-site-link" title="Voir le site public"><Globe2 size={17} /><span>Site public</span></Link>
+            <Link to="/app/settings" className={`connection-pill ${settings?.mode === 'live' ? 'live' : ''}`}>
               <span className="connection-dot" />
               {settings?.mode === 'live' ? 'WhatsApp connecté' : 'Mode démo'}
             </Link>

@@ -112,7 +112,7 @@ export default function Dashboard() {
           <p>Vos conversations avancent bien. Voici ce qui se passe aujourd’hui.</p>
         </div>
         <div className="page-actions">
-          <button className="button button-secondary" onClick={() => navigate('/chatbot')}><BotMessageSquare size={18} />Tester le chatbot</button>
+          <button className="button button-secondary" onClick={() => navigate('/app/chatbot')}><BotMessageSquare size={18} />Tester le chatbot</button>
           <button className="button button-primary" onClick={() => setScheduleOpen(true)}><Plus size={18} />Programmer un message</button>
         </div>
       </div>
@@ -121,7 +121,7 @@ export default function Dashboard() {
         <div className="demo-banner">
           <span className="demo-banner-icon"><Sparkles size={19} /></span>
           <div><strong>Votre espace est en mode démo.</strong><span> Explorez librement : les envois sont simulés, aucun message réel ne part.</span></div>
-          <Link to="/settings">Connecter WhatsApp <ArrowUpRight size={16} /></Link>
+          <Link to="/app/settings">Connecter WhatsApp <ArrowUpRight size={16} /></Link>
         </div>
       )}
 
@@ -146,7 +146,7 @@ export default function Dashboard() {
         <article className="card upcoming-card">
           <div className="card-header">
             <div><h2>Prochains envois</h2><p>Votre file d’attente</p></div>
-            <Link className="card-header-link" to="/schedules" aria-label="Voir tous les messages programmés"><ArrowUpRight size={18} /></Link>
+            <Link className="card-header-link" to="/app/schedules" aria-label="Voir tous les messages programmés"><ArrowUpRight size={18} /></Link>
           </div>
           <div className="upcoming-list">
             {data.upcoming.length === 0 && <div className="mini-empty"><Clock3 size={24} /><p>Aucun envoi en attente.</p></div>}
@@ -168,7 +168,7 @@ export default function Dashboard() {
         <article className="card automation-overview">
           <div className="card-header">
             <div><h2>Vos automatisations</h2><p>Le chatbot veille sur vos conversations</p></div>
-            <Link className="text-link" to="/chatbot">Tout gérer <ChevronRight size={16} /></Link>
+            <Link className="text-link" to="/app/chatbot">Tout gérer <ChevronRight size={16} /></Link>
           </div>
           <div className="automation-list">
             {data.rules.slice(0, 3).map((rule) => (
@@ -194,7 +194,7 @@ export default function Dashboard() {
               );
             })}
           </div>
-          <Link to="/history" className="activity-footer">Voir tout l’historique <ArrowRight size={15} /></Link>
+          <Link to="/app/history" className="activity-footer">Voir tout l’historique <ArrowRight size={15} /></Link>
         </article>
       </section>
 
