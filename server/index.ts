@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express, { type Request } from 'express';
 import { readFile } from 'node:fs/promises';
+import { createServer as createHttpServer } from 'node:http';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { apiErrorHandler, createApiRouter } from './routes.js';
@@ -69,16 +70,18 @@ app.use('/api', (_req, res) => res.status(404).json({ error: 'Route API introuva
 app.use('/api', apiErrorHandler);
 
 const stopScheduler = startScheduler(store);
+const server = createHttpServer(app);
 
 if (isProduction) {
   app.use(express.static(resolve(root, 'dist')));
   app.get('*', (_req, res) => res.sendFile(resolve(root, 'dist/index.html')));
 } else {
-  const { createServer } = await import('vite');
-  const vite = await createServer({
+  const { createServer: createViteServer } = await import('vite');
+  const vite = await createViteServer({
     root,
     configFile: resolve(root, 'vite.config.ts'),
-    server: { middlewareMode: true },
+    // Partager le serveur HTTP évite d’ouvrir un second port pour le HMR.
+    server: { middlewareMode: true, hmr: { server } },
     appType: 'spa',
   });
   app.use(vite.middlewares);
@@ -94,7 +97,7 @@ if (isProduction) {
   });
 }
 
-const server = app.listen(port, '0.0.0.0', () => {
+server.listen(port, '0.0.0.0', () => {
   console.log(`\n  AutoWhatsApp est prêt sur http://0.0.0.0:${port}`);
   console.log(`  Mode WhatsApp : ${process.env.WHATSAPP_ACCESS_TOKEN ? 'Cloud API' : 'démonstration'}\n`);
 });
